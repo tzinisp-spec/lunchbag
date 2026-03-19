@@ -1,0 +1,697 @@
+# ════════════════════════════════════════════════════════════
+# TASK 2 — CREATIVE BRIEF (MONTHLY)
+# ════════════════════════════════════════════════════════════
+build_creative_brief:
+  description: >
+    Build a Creative Brief for the Visual Director for
+    {brand_name}'s upcoming monthly photo shoot.
+
+    STEP 1 — Read the reference images:
+    Use the Style Reference Reader tool to analyse all
+    images in references/
+    These images ARE the creative direction. They define
+    the world completely — mood, colour, lighting,
+    texture, aesthetic. Do not interpret them through
+    any other lens.
+
+    STEP 2 — Write the brief:
+    The brief must be driven by two things only:
+    1. What the references say visually
+    2. Luanchbag's brand identity and product
+
+    Do not introduce seasonal direction.
+    Do not introduce occasion or campaign hooks.
+    Do not invent aesthetic direction not visible
+    in the reference images.
+
+    The brief must give the Visual Director:
+    1. REFERENCE IMAGE ANALYSIS — what the references
+       say about mood, colour, lighting, texture,
+       and visual energy. Be specific and visual.
+       Quote what you see, not what you assume.
+    2. BRAND FILTER — how Luanchbag's identity should
+       be applied to the reference aesthetic.
+       What stays, what gets adapted for the brand.
+    3. SHOT TYPE MIX — apply to {images_per_sprint} total:
+       This is a visual library for an earring brand.
+       The content mix defines how shots are distributed
+       across presentation types — not social media
+       categories.
+
+       Apply {content_mix} as follows:
+       - Worn on model: earring on ear, model present,
+         various distances and angles
+       - Product only: earring alone on a surface,
+         no model, clean and graphic
+       - Detail close-up: extreme close-up showing
+         the polymer texture, form, and colour of
+         the earring — abstract and sculptural
+       - Lifestyle context: earrings environment,
+         model interacting with the space around her
+       - Held or handled: earring held between fingers,
+         resting in a palm, being put on
+
+       Distribute shots across these types following
+       the percentages in {content_mix}.
+       Round to nearest whole number.
+       Include the breakdown in the brief so the
+       Visual Director knows exactly how many shots
+       of each type to plan.
+    4. PRODUCT COVERAGE — which products need shots
+       based on {product_focus}.
+    5. WHAT THE IMAGES MUST MAKE {target_audience}
+       FEEL — derived from the reference aesthetic
+       applied through the Luanchbag brand filter.
+    6. MATERIAL NOTE — how the polymer surface of
+       the earrings will interact with the lighting
+       visible in the reference images.
+    7. HARD CONSTRAINTS from {shoot_dont_list}.
+
+    WHAT TO NEVER DO:
+    - Do not mention seasons as a visual direction
+    - Do not mention occasions or campaigns
+
+    Immediately after writing the brief, pass it to the Visual Director.
+  expected_output: >
+    CREATIVE BRIEF — {brand_name} — {current_season} Shoot
+
+    TREND SIGNALS APPLIED
+    [Which HIGH/MEDIUM signals from the trend file influenced
+    this brief, or: NO TREND FILE — proceeded without]
+
+    OVERVIEW
+    [2-3 sentences on the shoot's purpose and direction,
+    specific to {brand_name}'s 3D printed polymer earrings
+    and Mediterranean identity]
+
+    MATERIAL NOTE FOR VISUAL DIRECTOR
+    [How the 3d polymer surface should influence
+    lighting choices and composition in this shoot]
+
+    SHOT REQUIREMENTS
+    Total shots: {images_per_sprint}
+    Format split: [feed count] feed (1:1) + [story count] story (9:16)
+    SHOT TYPE MIX:
+    - Worn on model: [N] shots
+    - Product only: [N] shots
+    - Detail close-up: [N] shots
+    - Lifestyle context: [N] shots
+    - Held or handled: [N] shots
+
+    PRIORITY PRODUCTS THIS SPRINT
+    [Earring name] — [N] shots — reason: [tie to launch or campaign]
+    (repeat per product)
+
+    AESTHETIC DIRECTIONS TO EXPLORE
+    Direction 1: [name] — [3-4 sentences grounded in mood_references]
+    Direction 2: [name] — [3-4 sentences]
+    Direction 3: [name] — [optional third direction]
+
+    AUDIENCE RESONANCE
+    [What must these images make {target_audience} feel?
+    Be specific to a 25-42 year old Greek woman who values
+    bold self-expression and sustainability. 3-4 sentences.]
+
+    CONSTRAINTS — MUST NOT INCLUDE
+    [Pulled directly from {shoot_dont_list} — bullet list]
+  agent: content_strategist
+  output_file: outputs/creative_brief.md
+
+# ════════════════════════════════════════════════════════════
+# TASK 3 — STYLE BIBLE & SHOT LIST
+# ════════════════════════════════════════════════════════════
+create_style_bible:
+  description: >
+    Read the approved Creative Brief carefully.
+
+    STEP 1 — Study the references:
+    Use the Style Reference Reader tool to re-read the mood
+    reference image.
+    Use the Composition Reference Reader tool to study all
+    composition references. Understand the visual vocabulary
+    — framing preferences, subject placement, background
+    treatment, negative space. You will invent new
+    compositions in this language, not copy the references.
+
+    STEP 2 — Design the Shoot Structure:
+    This sprint is organised into 2-3 distinct sets. Each set 
+    has its own location, lighting setup, surface, and mood. 
+    The same model appears in every set. The brand aesthetic 
+    runs through all sets like a thread.
+
+    Before writing the Shot List define each set using this 
+    structure:
+
+    ═══════════════════════════════════════
+    SET [N] — [SET NAME]
+    ═══════════════════════════════════════
+
+    LOCATION
+    Where within this world does this set live?
+    Be specific: a sunlit corner of a Mediterranean
+    apartment, a shaded stone courtyard, a whitewashed
+    outdoor wall.
+
+    LIGHTING
+    Quality, direction, temperature, shadow character.
+    Should feel distinctly different from other sets.
+
+    SURFACE & PROPS
+    What surfaces and materials appear in this set?
+    Textures, colours, materials that complement
+    the earring and the location.
+
+    MOOD
+    What is the emotional register of this set?
+    How does it differ from the other sets?
+    One sentence.
+
+    PRODUCT FOCUS
+    Which earring(s) are featured in this set?
+    If multiple products exist distribute them
+    across sets.
+
+    MODEL PRESENCE
+    Describe how the model appears in this set —
+    her energy, expression, how she relates to
+    the camera. Some shots in this set will be
+    product-only but the model's presence defines
+    the set's human character.
+
+    SHOT COUNT
+    How many of the {images_per_sprint} total
+    shots belong to this set? Distribute unevenly
+    based on creative potential — not every set
+    needs equal shots.
+
+    SET DNA PROMPT BLOCK
+    A single paragraph of 60-80 words describing
+    this specific set — location, lighting language,
+    surface, and model presence. This will be
+    injected into every generation prompt for
+    shots belonging to this set. Lock only:
+    model description, location, lighting language.
+    Leave composition and expression open.
+
+    ═══════════════════════════════════════
+
+    Define 2-3 sets before writing any shots. 
+    Make each set feel like a distinct chapter 
+    in the same story. A viewer scrolling through 
+    the full gallery should feel the shift between 
+    sets — not as inconsistency but as depth.
+
+    MODEL CONSISTENCY ACROSS ALL SETS:
+    Same model in every set — identical ethnicity, 
+    hair, skin tone. She moves through different 
+    spaces but she is always the same person.
+
+    STEP 3 — Design the shoot concept:
+    Material context: {earring_materials}
+    Brand palette: cobalt blue #2B4EFF, coral #E8634A,
+    blush pink #D4748A, warm sand #F0E6D3, ivory #F7F4EF
+    Never include: {shoot_dont_list}
+
+    PART 1 — STYLE BIBLE
+    Concept name, mood statement, backgrounds with HEX codes,
+    colour palette with HEX codes, earring presentation rules,
+    props rules (only if rhyming with earring shape/colour),
+    negative space minimum, composition philosophy,
+    DO NOT INCLUDE list.
+
+    PART 2 — TECHNICAL SPEC
+    This applies to EVERY image in the shoot without exception.
+    Include:
+    - Camera: body type and sensor format
+    - Lens: focal length and aperture
+    - Aperture: specific f-stop for this shoot
+    - Shutter speed: range
+    - ISO: range
+    - Key light: direction, quality, modifier, temperature (K)
+    - Fill light: ratio to key, direction
+    - Background light: yes/no, treatment
+    - Shadow treatment: hard/soft/none, direction
+    - White balance: Kelvin value
+    - Post-processing style: 1-2 sentences
+
+    PART 3 — SHOT LIST
+    Every shot needed for the sprint.
+    Reference codes must now include set identifier:
+    SHOOT-[SEASON]-S[N]-[NNN] e.g. SHOOT-SPR26-S1-001
+    
+    The Shot List must contain exactly {images_per_sprint} shots. 
+    Count them before submitting. If the count is less than 
+    {images_per_sprint} add more shots until the target is reached. 
+    Write the total count at the top of the Shot List section:
+    "Total shots: [N] of {images_per_sprint}"
+
+    For each shot:
+    - Reference code (with set identifier)
+    - Shot type: [WORN] [PRODUCT] [DETAIL] [LIFESTYLE] [HELD]
+    - Format: feed (1:1) or story (9:16)
+    - Product: specific Luanchbag earring name
+    - Composition: detailed framing instruction — invent
+      freely within the aesthetic vocabulary established by
+      the composition references. Do not just copy references.
+    - Mood note: how this shot should feel
+    - Special notes: any Style Bible deviation or STANDARD
+
+    Each shot in the Shot List must be tagged
+    with its shot type:
+    [WORN] [PRODUCT] [DETAIL] [LIFESTYLE] [HELD]
+
+    The distribution across the full Shot List
+    must match the breakdown specified in the
+    Creative Brief.
+
+    COMPOSITION RHYTHM:
+    The Shot List is a creative rhythm not a formula.
+    As you write each shot, read what came before it
+    and ask what this shoot needs next.
+
+    Think across these dimensions when making decisions:
+
+    DISTANCE — how close is the camera to the subject?
+    The full range is available: from an earring filling
+    the entire frame to a wide shot where the earring
+    is a detail in a larger scene. Use the full range.
+    If you have been close for several shots, pull back.
+    If you have been wide, move in.
+
+    ANGLE — where is the camera relative to the subject?
+    Front-on, three-quarter, pure profile, top-down,
+    low angle looking up, over the shoulder. Each angle
+    tells a different story about the same earring.
+    Vary them based on what feels right for the shoot,
+    not based on a quota.
+
+    SUBJECT RELATIONSHIP — who or what is in the frame?
+    Earring worn on a model. Earring alone with no model.
+    Earring held in a hand. Earring resting on a surface.
+    Each relationship creates a different emotional
+    register. A shoot that only shows worn earrings
+    feels one-dimensional. Give the earring different
+    contexts.
+
+    THE ONLY RULE:
+    Every shot must earn its place. Before writing a
+    shot ask: does this add something the others do not?
+    A different perspective, a different distance,
+    a different emotional register? If the answer is
+    no — rethink it.
+
+    This is not a checklist. These are the instincts
+    of a photographer who has shot jewelry for 20 years
+    and knows that the best shoots have movement,
+    surprise, and intention in every frame.
+
+    In the composition description for each shot write
+    it vividly enough that a photographer could
+    visualise it immediately — what is in the frame,
+    where the light lands first, what the distance and
+    angle are, what the subject relationship is.
+    One specific sentence is worth more than five
+    vague ones.
+  expected_output: >
+    ═══════════════════════════════════════
+    PART 1 — STYLE BIBLE
+    Concept: [Name] | Brand: {brand_name} | Sprint: {current_season}
+    ═══════════════════════════════════════
+
+    MOOD
+    [2-3 sentences grounded in the style reference image]
+
+    BACKGROUNDS
+    [Material, colour + HEX, texture — from brand palette]
+
+    COLOUR PALETTE
+    [3-5 colours with HEX — from brand palette]
+
+    EARRING PRESENTATION
+    [How product sits in every frame]
+
+    PROPS
+    Allowed: YES/NO
+    If yes: [only if rhyming with earring shape/colour]
+
+    NEGATIVE SPACE
+    Minimum: [%] of frame
+
+    COMPOSITION PHILOSOPHY
+    [What visual rules govern all compositions in this shoot,
+    derived from the composition references provided]
+
+    DO NOT INCLUDE
+    [From {shoot_dont_list} plus shoot-specific additions]
+
+    ═══════════════════════════════════════
+    PART 2 — TECHNICAL SPEC
+    Applies to every image in this shoot without exception
+    ═══════════════════════════════════════
+
+    Camera: [body type]
+    Lens: [focal length] [max aperture]
+    Aperture: f/[value]
+    Shutter speed: [range]
+    ISO: [range]
+    Key light: [direction, quality, modifier, Kelvin]
+    Fill light: [ratio, direction]
+    Background light: [yes/no, treatment]
+    Shadow treatment: [hard/soft/none, direction]
+    White balance: [Kelvin]
+    Post-processing: [1-2 sentences]
+
+    ═══════════════════════════════════════
+    SHOOT STRUCTURE
+    ═══════════════════════════════════════
+
+    [Define SET 1, SET 2, and optionally SET 3 here following 
+    the location/lighting/surface/mood/focus/DNA structure]
+
+    ═══════════════════════════════════════
+    MODEL CONSISTENCY
+    ═══════════════════════════════════════
+
+    [Strict description of the model to be used across all sets]
+
+    ═══════════════════════════════════════
+    PART 3 — SHOT LIST
+    Total shots: [N]
+    ═══════════════════════════════════════
+
+    [SHOOT-SPR26-S1-001]
+    Shot Type: [WORN/PRODUCT/DETAIL/LIFESTYLE/HELD]
+    Format: [1:1 or 9:16]
+    Product: [specific Luanchbag earring name]
+    Composition: [detailed framing instruction]
+    Mood: [feeling]
+    Notes: STANDARD or [deviation]
+
+    [repeat for every shot]
+  agent: visual_director
+  context:
+    - build_creative_brief
+  output_file: outputs/style_bible_and_shot_list.md
+
+# ════════════════════════════════════════════════════════════
+# TASK 4 — IMAGE GENERATION PACKAGE
+# ════════════════════════════════════════════════════════════
+build_image_generation_package:
+  description: >
+    Read the Style Bible, Technical Spec, and Shot List from
+    outputs/style_bible_and_shot_list.md
+
+    Build every image generation prompt using this structure:
+
+    PROMPT STRUCTURE (apply to every shot):
+    1. PRODUCT CONTEXT: Describe how the featured earring
+       interacts with the model or scene. Use: {earring_materials}.
+       Do NOT name the earring — the tool provides the 
+       correct visual reference automatically.
+    2. TECHNICAL SPEC: Apply the exact Technical Spec from
+       Part 2 of the Style Bible document. This block is 
+       IDENTICAL for every prompt.
+    3. COMPOSITION: Apply the specific composition instruction
+       from this shot's Shot List entry.
+    4. STYLE: Apply the mood, background, and colour palette
+       rules from the Style Bible.
+    5. STYLE ANCHOR: End every prompt with: {imagen_style_anchor}
+
+    CONTINUOUS GENERATION:
+    Generate ALL shots in one continuous run. Use the approved 
+    prompt structure. Save with final reference codes.
+    Update the catalog after every successful generation.
+
+    When calling the image generation tool, always pass
+    exactly 3 pipe-separated fields in this exact order:
+    creative_prompt|aspect_ratio|reference_code
+
+    Input format for each shot:
+    creative_prompt|aspect_ratio|reference_code
+
+    Reference codes must now include set identifier:
+    SHOOT-SPR26-S1-001  → Sprint 26, Set 1, Shot 1
+    SHOOT-SPR26-S2-001  → Sprint 26, Set 2, Shot 1
+    SHOOT-SPR26-S3-001  → Sprint 26, Set 3, Shot 1
+
+    The ImageGeneratorTool reads the set number from the 
+    reference code and automatically applies the correct 
+    SET DNA for that shot. You do not need to specify the 
+    set in the creative prompt — just use the correct 
+    reference code format.
+
+    Never invent creative decisions. Every element must come
+    from the Style Bible, Technical Spec, or Shot List only.
+
+    After generating all images, produce a CATALOG MANIFEST — a
+    structured index of all shots with reference codes,
+    formats, content types, prompt summaries, and the local file path 
+    returned by the tool.
+
+    GENERATION VERIFICATION RULE — NON NEGOTIABLE:
+    After every image generation check the tool
+    response. A successful generation returns a
+    line starting with "SUCCESS".
+    Any response starting with "GENERATION_FAILED"
+    or "TOOL_ERROR" means the image was NOT saved.
+
+    For every failed generation:
+    - Log the ref_code that failed
+    - Immediately retry that exact shot up to
+      3 times before moving to the next shot
+    - If all 3 retries fail mark it as permanently
+      failed and continue
+
+    Before reporting the task complete:
+    - Count the actual files in
+      asset_library/images/
+    - Compare against {images_per_sprint}
+    - If count is less than {images_per_sprint}
+      regenerate the missing shots using their
+      ref_codes from the Shot List
+    - Only report complete when file count matches
+      {images_per_sprint}
+
+    Print this line before starting generation:
+    "Starting generation of {images_per_sprint} images.
+    Will verify each save before proceeding."
+
+    Print this line after every 5 successful saves:
+    "Progress: [saved]/[total] images confirmed saved."
+
+    Print this line when complete:
+    "Generation complete: [N] images confirmed in
+    asset library."
+  expected_output: >
+    A complete Image Generation Report structured as:
+
+    ═══════════════════════════════════════
+    IMAGE GENERATION PACKAGE
+    Brand: {brand_name}
+    Sprint: {current_season}
+    Total shots processed: [N]
+    Generated: {current_date}
+    ═══════════════════════════════════════
+
+    [SHOOT-SPR26-S1-001]
+    Status: [SUCCESS/FAILED]
+    File Path: [path from tool]
+    Prompt used: [The full production prompt]
+
+    [repeat for every shot including buffer shots]
+
+    ═══════════════════════════════════════
+    CATALOG MANIFEST
+    ═══════════════════════════════════════
+    Code          | Format | Type         | File Path
+    ──────────────|────────|──────────────|──────────────
+    SHOOT-SPR26-S1-001 | 1:1    | promotional  | [path]
+    [continue for all shots]
+  agent: photographer
+  context:
+    - create_style_bible
+  output_file: outputs/image_generation_package.md
+
+run_photo_editor:
+  description: >
+    Run the Photo Editor Tool to review all generated
+    images in the asset library.
+    Call the PhotoEditorTool with an empty string input.
+
+    The tool will automatically:
+    - Review every image against 8 quality criteria
+    - Apply targeted fixes to images that fail
+    - Re-review fixes before accepting them
+    - Save a full report with per-image verdicts
+
+    ALSO: Check for any images with 'Art Review-'
+    prefix in the asset library. For these images
+    read the art_director_latest.md report to find
+    the REGENERATION NOTE for each flagged image
+    and use it as the fix instruction when calling
+    _fix_image. After fixing rename the file back
+    to its original name without the Art Review-
+    prefix.
+
+    After the tool completes, report the summary:
+    - Total reviewed
+    - First-pass approval rate
+    - How many were fixed
+    - How many remain flagged for manual review
+  expected_output: >
+    Photo Editor review complete. Summary of results
+    with approval rate and list of any flagged images.
+  agent: visual_director
+
+write_catalog:
+  description: >
+    Generate a JSON catalog of all approved images.
+    Call the CatalogWriterTool with an empty string.
+    This tool will:
+    1. Parse the Photo Editor report for image statuses.
+    2. Scan the asset library for final image files.
+    3. Build a structured catalog.json with metadata.
+    4. Skip any flagged or unreviewed images.
+  expected_output: >
+    Catalog update complete. Structured JSON saved to
+    asset_library/catalog.json.
+  agent: photographer
+
+run_art_director:
+  description: >
+    Run the Art Director Tool to review all approved
+    images for composition drift, lighting drift,
+    and mood drift.
+    Call the ArtDirectorTool with an empty string.
+
+    After the tool completes report the summary:
+    - Total images reviewed
+    - How many passed
+    - How many flagged for rework with their
+      regeneration notes
+
+    The flagged images have been renamed with
+    Art Review- prefix and their regeneration notes
+    are in the report. The Photo Editor should be
+    run again after this to fix the flagged images
+    using the regeneration notes as fix instructions.
+  expected_output: >
+    Art Direction review complete. Summary of creative
+    quality across the full shoot with batch
+    observations and list of any images flagged
+    for rework.
+  agent: visual_director
+
+final_approval:
+  description: >
+    The photoshoot and photo editor review are complete.
+    Present the brand owner with a final summary and
+    ask for approval before finishing the sprint.
+
+    Use the Human Approval tool with this message:
+
+    "FINAL APPROVAL — {current_season} Shoot Complete
+
+    Photo Editor Report:
+    [Read and summarise outputs/photo_editor_latest.md
+    — total images, approval rate, how many fixed,
+    how many flagged for manual review]
+
+    Your images are ready to review at:
+    asset_library/images/
+
+    Type 'approve' to complete the sprint.
+    Type 'reshoot' to clear all images and regenerate
+    the entire shoot from scratch."
+
+    If APPROVED: report sprint complete with final stats.
+
+    If RESHOOT: clear the asset library and restart
+    the build_image_generation_package task followed
+    by run_photo_editor and final_approval again.
+    Keep the same Style Bible and Shot List —
+    only the images are regenerated.
+  expected_output: >
+    Either sprint confirmed complete with final approval,
+    or reshoot initiated with asset library cleared
+    and image generation restarting.
+  agent: visual_director
+
+generate_sprint_report:
+  description: >
+    Generate the final Sprint Report for this sprint.
+
+      First collect timing data by reading the timestamps
+      from the output files to estimate step durations.
+
+      Calculate step durations using file modification
+      times as proxies for step completion.
+
+      Use this Python logic to get modification times:
+      import os
+      from pathlib import Path
+
+      outputs = Path("outputs")
+
+      def mtime(filename):
+          p = outputs / filename
+          return p.stat().st_mtime if p.exists() else None
+
+      times = {
+          "brief":      mtime("creative_brief.md"),
+          "bible":      mtime("style_bible_and_shot_list.md"),
+          "package":    mtime("image_generation_package.md"),
+          "photo_ed":   mtime("photo_editor_latest.md"),
+          "catalog":    mtime("art_director_latest.md"),
+          "art_dir":    mtime("art_director_latest.md"),
+          "report":     mtime("sprint_report_latest.md"),
+      }
+
+      Calculate each step duration as the difference
+      between consecutive modification times.
+      IMPORTANT: If the result of any subtraction is
+      negative, set that step duration to 0.
+      Never pass a negative number as a step duration.
+
+      Use this order for the differences:
+      - creative_brief:              brief - sprint_start
+      - create_style_bible:          bible - brief
+      - build_image_generation:      package - bible
+      - run_photo_editor:            photo_ed - package
+      - write_catalog:               catalog - photo_ed
+      - run_art_director:            art_dir - catalog
+      - final_approval:              0 (no file proxy)
+
+      Sprint start time: use the modification time of
+      creative_brief.md minus the known average brief
+      generation time of 3 minutes as an approximation,
+      OR read it from the first line of
+      creative_brief.md if a timestamp is present.
+
+      Then call the Sprint Reporter Tool with a JSON string
+      in this format:
+      {
+        "sprint_id": "[extract from image filenames]",
+        "started_at": "[modification time of creative_brief.md]",
+        "steps": {
+          "build_creative_brief": [seconds],
+          "create_style_bible": [seconds],
+          "build_image_generation_package": [seconds],
+          "run_photo_editor": [seconds],
+          "write_catalog": [seconds],
+          "run_art_director": [seconds],
+          "final_approval": [seconds]
+        },
+        "images_planned": [read from image_generation_package.md],
+        "errors": []
+      }
+
+      After the tool runs confirm the report has been
+      saved and provide the path to the user.
+  expected_output: >
+    Sprint Report generated and saved to
+    outputs/sprint_report_latest.md
+    and outputs/sprint_reports/
+    with timestamp. Report covers all 9 sections.
+  agent: photographer
+

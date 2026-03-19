@@ -1,0 +1,440 @@
+# ════════════════════════════════════════════════════════════
+# TASK 1 — TREND RESEARCH
+# ════════════════════════════════════════════════════════════
+research_trends:
+  description: >
+    Research current Instagram trends relevant to {brand_name},
+    a female earrings brand targeting {target_audience}.
+
+    You must cover all four of the following areas:
+
+    1. CONTENT FORMATS: What types of posts are getting the
+       most reach and saves on Instagram this week in the
+       jewelry and fashion space? (Carousels, single images,
+       Reels, Stories, etc.)
+
+    2. HASHTAGS: What are the top 5 trending hashtags in the
+       jewelry and fashion space right now? Include estimated
+       post volume for each.
+
+    3. COMPETITORS: Check these accounts: {competitor_accounts}.
+       What are they doing that is working? Any new aesthetics
+       relevant to {brand_name}'s aesthetic?
+
+    For every trend or signal, assign a relevance score:
+    HIGH — directly actionable for {brand_name} this week
+    MEDIUM — worth monitoring, may become relevant soon
+    LOW — interesting but not relevant to this brand
+
+    Flag any urgent, time-sensitive opportunities at the very
+    top of your brief under URGENT ALERTS.
+
+    Today's date: {current_date}
+  expected_output: >
+    A structured trend brief in this exact format:
+
+    URGENT ALERTS (if any):
+    [List any time-sensitive opportunities here, or write NONE]
+
+    1. TOP CONTENT FORMATS THIS WEEK
+    [Format name] — Relevance: HIGH/MEDIUM/LOW
+    Why it matters: [1-2 sentences]
+    Recommendation: [specific action for {brand_name}]
+
+    2. TOP 5 TRENDING HASHTAGS
+    #[hashtag] — [estimated volume] — Relevance: HIGH/MEDIUM/LOW
+    (repeat for all 5)
+
+    3. COMPETITOR MOVES
+    Account: [@handle]
+    What they did: [description]
+    Worth responding to: YES/NO
+    If yes, how: [recommendation]
+
+    4. INDUSTRY SIGNALS
+    [Signal] — Source: [publication] — Relevance: HIGH/MEDIUM/LOW
+    Implication for {brand_name}: [1 sentence]
+  agent: trend_scout
+
+# ════════════════════════════════════════════════════════════
+# TASK 2 — CREATIVE BRIEF (MONTHLY)
+# ════════════════════════════════════════════════════════════
+build_creative_brief:
+  description: >
+    Build a Creative Brief for the Visual Director for
+    {brand_name}'s upcoming monthly photo shoot.
+
+    IMPORTANT: This brief is for the VISUAL and CREATIVE
+    direction only. Trends are irrelevant here — they will
+    inform copy and captions in a separate workflow.
+    The brief must be driven entirely by the visual
+    references provided by the brand owner.
+
+    STEP 1 — Read the style reference:
+    Use the Style Reference Reader tool to analyse the
+    monthly style_reference image in detail.
+    This image IS the creative direction for this month.
+    Everything in the brief must flow from this image.
+
+    STEP 2 — Read the composition references:
+    Use the Composition Reference Reader tool to study all
+    composition references. Understand the spatial language,
+    framing preferences, and subject placement logic.
+
+    STEP 3 — Write the brief:
+    The brief must be grounded 100% in the visual references.
+    Do not introduce any aesthetic direction that cannot be
+    traced back to the style reference image.
+
+    The shoot will cover {posts_per_week} posts per week
+    for 6 weeks. Content mix: {content_mix}.
+    Image format split: {image_formats}
+
+    Brand context (use to apply Orpina identity to the
+    reference aesthetic — do not let it override the refs):
+    - Products: {product_focus}
+    - Materials: {earring_materials}
+    - Never include: {shoot_dont_list}
+    - Upcoming launches: {upcoming_launches}
+    - Season: {current_season}
+
+    The brief must give the Visual Director:
+    1. STYLE REFERENCE ANALYSIS — detailed breakdown of
+       what the reference image says: mood, colour temperature,
+       lighting quality, background treatment, subject
+       relationship to frame. This is the creative foundation.
+    2. COMPOSITION LANGUAGE — what the composition references
+       reveal about the brand owner's spatial preferences.
+       The agent will invent compositions freely within this
+       language — these are guidelines not templates.
+    3. TOTAL SHOT COUNT broken down by content type based
+       on {content_mix} and {posts_per_week} for 6 weeks.
+    4. PRODUCT COVERAGE — which products need the most
+       shots and why, based on {upcoming_launches}.
+    5. WHAT THE IMAGES MUST MAKE {target_audience} FEEL —
+       grounded in the mood of the style reference.
+    6. MATERIAL NOTE — how the polymer surface of the
+       earrings will interact with the lighting in the
+       style reference.
+    7. HARD CONSTRAINTS from {shoot_dont_list}.
+
+    STEP 4 — Request human approval:
+    Use the Human Approval tool with this message:
+    "CHECKPOINT 1: The Creative Brief for {current_season}
+    is ready for your review.
+    Find it at: outputs/creative_brief.md
+    Open the file, read it carefully, then return here.
+    Type 'yes' to approve or describe what you want changed."
+
+    If CHANGES REQUESTED: revise the brief based on the
+    feedback and request approval again.
+    If APPROVED: pass the brief to the Visual Director.
+  expected_output: >
+    CREATIVE BRIEF — {brand_name} — {current_season} Shoot
+
+    TREND SIGNALS APPLIED
+    [Which HIGH/MEDIUM signals from the trend file influenced
+    this brief, or: NO TREND FILE — proceeded without]
+
+    OVERVIEW
+    [2-3 sentences on the shoot's purpose and direction,
+    specific to {brand_name}'s 3D printed polymer earrings
+    and Mediterranean identity]
+
+    MATERIAL NOTE FOR VISUAL DIRECTOR
+    [How the 3d polymer surface should influence
+    lighting choices and composition in this shoot]
+
+    SHOT REQUIREMENTS
+    Total shots needed: [N] ([posts_per_week] x 6 weeks)
+    Format split: [feed count] feed (1:1) + [story count] story (9:16)
+    - Promotional: [N] shots — products: [specific earring names]
+    - Educational: [N] shots — topics: [specific angles e.g. process,
+      material, how to style]
+    - Entertaining: [N] shots — mood: [specific feeling or scenario]
+
+    PRIORITY PRODUCTS THIS SPRINT
+    [Earring name] — [N] shots — reason: [tie to launch or campaign]
+    (repeat per product)
+
+    AESTHETIC DIRECTIONS TO EXPLORE
+    Direction 1: [name] — [3-4 sentences grounded in mood_references]
+    Direction 2: [name] — [3-4 sentences]
+    Direction 3: [name] — [optional third direction]
+
+    AUDIENCE RESONANCE
+    [What must these images make {target_audience} feel?
+    Be specific to a 25-42 year old Greek woman who values
+    bold self-expression and sustainability. 3-4 sentences.]
+
+    CONSTRAINTS — MUST NOT INCLUDE
+    [Pulled directly from {shoot_dont_list} — bullet list]
+  agent: content_strategist
+  output_file: outputs/creative_brief.md
+
+# ════════════════════════════════════════════════════════════
+# TASK 3 — STYLE BIBLE & SHOT LIST
+# ════════════════════════════════════════════════════════════
+create_style_bible:
+  description: >
+    Read the approved Creative Brief carefully.
+
+    STEP 1 — Study the references:
+    Use the Style Reference Reader tool to re-read the mood
+    reference image.
+    Use the Composition Reference Reader tool to study all
+    composition references. Understand the visual vocabulary
+    — framing preferences, subject placement, background
+    treatment, negative space. You will invent new
+    compositions in this language, not copy the references.
+
+    STEP 2 — Extract Shoot DNA:
+    You must extract a "Shoot DNA" layer entirely from the
+    style reference image provided. The model appearance,
+    location, lighting, and mood must all be extracted from 
+    or inspired by what is visible in the style and 
+    composition reference images, not invented from scratch.
+    This DNA will lock consistency across all generated images.
+
+    STEP 3 — Design the shoot concept:
+    Material context: {earring_materials}
+    Brand palette: cobalt blue #2B4EFF, coral #E8634A,
+    blush pink #D4748A, warm sand #F0E6D3, ivory #F7F4EF
+    Never include: {shoot_dont_list}
+
+    PART 1 — STYLE BIBLE
+    Concept name, mood statement, backgrounds with HEX codes,
+    colour palette with HEX codes, earring presentation rules,
+    props rules (only if rhyming with earring shape/colour),
+    negative space minimum, composition philosophy,
+    DO NOT INCLUDE list.
+
+    PART 2 — TECHNICAL SPEC
+    This applies to EVERY image in the shoot without exception.
+    Include:
+    - Camera: body type and sensor format
+    - Lens: focal length and aperture
+    - Aperture: specific f-stop for this shoot
+    - Shutter speed: range
+    - ISO: range
+    - Key light: direction, quality, modifier, temperature (K)
+    - Fill light: ratio to key, direction
+    - Background light: yes/no, treatment
+    - Shadow treatment: hard/soft/none, direction
+    - White balance: Kelvin value
+    - Post-processing style: 1-2 sentences
+
+    PART 3 — SHOT LIST
+    Every shot needed for 6 weeks.
+    Reference codes: SHOOT-[SEASON]-[NNN] e.g. SHOOT-SPR26-001
+    For each shot:
+    - Reference code
+    - Content type: promotional/educational/entertaining
+    - Format: feed (1:1) or story (9:16)
+    - Product: specific Orpina earring name
+    - Composition: detailed framing instruction — invent
+      freely within the aesthetic vocabulary established by
+      the composition references. Do not just copy references.
+    - Mood note: how this shot should feel
+    - Special notes: any Style Bible deviation or STANDARD
+  expected_output: >
+    ═══════════════════════════════════════
+    PART 1 — STYLE BIBLE
+    Concept: [Name] | Brand: {brand_name} | Sprint: {current_season}
+    ═══════════════════════════════════════
+
+    MOOD
+    [2-3 sentences grounded in the style reference image]
+
+    BACKGROUNDS
+    [Material, colour + HEX, texture — from brand palette]
+
+    COLOUR PALETTE
+    [3-5 colours with HEX — from brand palette]
+
+    EARRING PRESENTATION
+    [How product sits in every frame]
+
+    PROPS
+    Allowed: YES/NO
+    If yes: [only if rhyming with earring shape/colour]
+
+    NEGATIVE SPACE
+    Minimum: [%] of frame
+
+    COMPOSITION PHILOSOPHY
+    [What visual rules govern all compositions in this shoot,
+    derived from the composition references provided]
+
+    DO NOT INCLUDE
+    [From {shoot_dont_list} plus shoot-specific additions]
+
+    ═══════════════════════════════════════
+    PART 2 — TECHNICAL SPEC
+    Applies to every image in this shoot without exception
+    ═══════════════════════════════════════
+
+    Camera: [body type]
+    Lens: [focal length] [max aperture]
+    Aperture: f/[value]
+    Shutter speed: [range]
+    ISO: [range]
+    Key light: [direction, quality, modifier, Kelvin]
+    Fill light: [ratio, direction]
+    Background light: [yes/no, treatment]
+    Shadow treatment: [hard/soft/none, direction]
+    White balance: [Kelvin]
+    Post-processing: [1-2 sentences]
+
+    ═══════════════════════════════════════
+    SHOOT DNA
+    Locks consistency across every image in this sprint.
+    Every generated image must match this description.
+    ═══════════════════════════════════════
+
+    MODEL
+    Ethnicity: [specific — e.g. Mediterranean, South Asian]
+    Age range: [e.g. late 20s to early 30s]
+    Skin tone: [specific description with warm/cool/neutral]
+    Hair: [colour, length, texture, how it is worn]
+    Expression: [e.g. composed, direct gaze, slight smile]
+
+    LOCATION
+    Setting: [e.g. urban street, sun-drenched courtyard, indoor studio]
+    Surface: [what the product rests on or model stands on]
+    Atmosphere: [time of day, season feel, air quality]
+
+    LIGHTING
+    Direction: [e.g. from camera-left at 45 degrees]
+    Quality: [hard/soft, diffused/direct]
+    Temperature: [warm/cool, Kelvin value]
+    Shadows: [hard/soft/none, direction]
+    Key modifier: [e.g. large softbox, reflector, window]
+
+    COLOUR WORLD
+    Dominant palette: [3-4 colours with HEX]
+    Skin tone treatment: [warm/cool/neutral grade]
+    Background tone: [HEX]
+    Overall grade: [e.g. warm film, cool editorial, natural]
+
+    MOOD IN ONE SENTENCE
+    [A single sentence that captures the feeling of every
+    image in this shoot — what the viewer should feel]
+
+    SHOOT DNA PROMPT BLOCK
+    [This is the most important part. Write a single
+    dense paragraph of 80-120 words that describes the
+    model, location, lighting, and mood in enough detail
+    that Nano Banana can reproduce the same world in every
+    generated image. Write it as a direct generation
+    prompt — present tense, descriptive, specific.
+    Do not mention the earring here — that is handled
+    separately. This block will be injected verbatim
+    into every image generation prompt in this sprint.]
+
+    ═══════════════════════════════════════
+    PART 3 — SHOT LIST
+    Total shots: [N]
+    ═══════════════════════════════════════
+
+    [SHOOT-SPR26-001]
+    Type: [promotional/educational/entertaining]
+    Format: [1:1 or 9:16]
+    Product: [specific Orpina earring name]
+    Composition: [detailed framing instruction]
+    Mood: [feeling]
+    Notes: STANDARD or [deviation]
+
+    [repeat for every shot]
+  agent: visual_director
+  context:
+    - build_creative_brief
+  output_file: outputs/style_bible.md
+
+# ════════════════════════════════════════════════════════════
+# TASK 4 — IMAGE GENERATION PACKAGE
+# ════════════════════════════════════════════════════════════
+build_image_generation_package:
+  description: >
+    Read the Style Bible, Technical Spec, and Shot List from
+    outputs/style_bible_and_shot_list.md
+
+    Build every image generation prompt using this structure:
+
+    PROMPT STRUCTURE (apply to every shot):
+    1. PRODUCT CONTEXT: Describe how the featured earring
+       interacts with the model or scene. Use: {earring_materials}.
+       Do NOT name the earring — the tool provides the 
+       correct visual reference automatically.
+    2. TECHNICAL SPEC: Apply the exact Technical Spec from
+       Part 2 of the Style Bible document. This block is 
+       IDENTICAL for every prompt.
+    3. COMPOSITION: Apply the specific composition instruction
+       from this shot's Shot List entry.
+    4. STYLE: Apply the mood, background, and colour palette
+       rules from the Style Bible.
+    5. STYLE ANCHOR: End every prompt with: {imagen_style_anchor}
+
+    STEP 1 — TEST BATCH:
+    Generate the first 3 shots only.
+    Name them TEST-[ref_code] e.g. TEST-SHOOT-SPR26-001
+    After generating, use the Human Approval tool with
+    this message:
+    "CHECKPOINT 2: 3 test images are ready for your review.
+    Find them at:
+    asset_library/images/TEST-SHOOT-SPR26-001.png
+    asset_library/images/TEST-SHOOT-SPR26-002.png
+    asset_library/images/TEST-SHOOT-SPR26-003.png
+    Open the images. Type 'yes' to approve the full batch
+    or describe what needs to change."
+
+    If CHANGES REQUESTED: adjust all prompts based on
+    feedback and regenerate the test batch.
+    If APPROVED: proceed to Step 2.
+
+    STEP 2 — FULL BATCH:
+    Generate all remaining shots using the approved prompt
+    structure. Save with final reference codes.
+    Update the catalog after every successful generation.
+
+    When calling the image generation tool, always pass
+    exactly 3 pipe-separated fields in this exact order:
+    creative_prompt|aspect_ratio|reference_code
+
+    Never invent creative decisions. Every element must come
+    from the Style Bible, Technical Spec, or Shot List only.
+
+    After generating all images, produce a CATALOG MANIFEST — a
+    structured index of all shots with reference codes,
+    formats, content types, prompt summaries, and the local file path 
+    returned by the tool.
+  expected_output: >
+    A complete Image Generation Package structured as:
+
+    ═══════════════════════════════════════
+    IMAGE GENERATION PACKAGE
+    Brand: {brand_name}
+    Sprint: {current_season}
+    Total shots: [N]
+    Generated: {current_date}
+    ═══════════════════════════════════════
+
+    [SHOOT-JUN-001]
+    Format: feed (1:1)
+    Content type: promotional
+    Product: [earring name]
+    Prompt: [The full production prompt based on the Style Bible
+    and specific composition notes on the Shot List]
+
+    ═══════════════════════════════════════
+    CATALOG MANIFEST
+    ═══════════════════════════════════════
+    Code          | Format | Type         | Prompt summary
+    ─────────────-|────────|──────────────|──────────────────────
+    SHOOT-JUN-001 | 1:1    | promotional  | [first 15 words...]
+    SHOOT-JUN-002 | 9:16   | entertaining | [first 15 words...]
+    [continue for all shots]
+  agent: photographer
+  context:
+    - create_style_bible
+  output_file: outputs/image_generation_package.md

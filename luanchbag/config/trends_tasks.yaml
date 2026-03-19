@@ -1,0 +1,93 @@
+# ════════════════════════════════════════════════════════════
+# TASK 1 — TREND RESEARCH (runs monthly, standalone)
+# ════════════════════════════════════════════════════════════
+research_trends:
+  description: >
+    Research current Instagram trends relevant to {brand_name},
+    a Greek brand making 3D printed statement earrings in bold,
+    sculptural forms. Target audience: {target_audience}.
+
+    Cover these four areas:
+
+    1. CONTENT FORMATS
+    What post types are getting the most saves and reach in the
+    jewelry and independent accessories space this week?
+    Focus on: carousels, editorial portraits, behind-the-scenes
+    process content, product close-ups, lifestyle context shots.
+
+    2. HASHTAGS
+    Top 5 trending hashtags across these three categories:
+    - Statement jewelry / earring culture
+    - 3D printing / sustainable fashion
+    - Greek fashion / Mediterranean aesthetic
+    Include estimated post volume for each.
+
+    3. COMPETITOR SIGNAL
+    Check {competitor_accounts}.
+    For each, note: what they posted this week, what format
+    performed best, and whether any move is worth responding
+    to for {brand_name}.
+    Also check {brand_instagram_handle} to confirm we are
+    not duplicating content we already posted.
+
+    4. SUSTAINABILITY & CRAFT TRENDS
+    Any rising conversation around sustainable jewelry,
+    3D printing in fashion, independent makers, or
+    slow fashion that {brand_name} could authentically
+    join this month?
+
+    Score every finding:
+    HIGH — directly actionable for {brand_name} this week
+    MEDIUM — worth monitoring, relevant within the month
+    LOW — interesting but not relevant right now
+
+    Flag urgent time-sensitive opportunities at the top.
+
+    IMPORTANT: This task runs monthly. Your output will be saved automatically
+    to trends/latest_trends.md so the rest
+    of the team can access it asynchronously.
+
+    Today's date: {current_date}
+  expected_output: >
+    A structured trend brief in this exact format:
+
+    TREND BRIEF — {brand_name}
+    Generated: {current_date}
+    Valid until: [30 days from today]
+
+    ───────────────────────────────────────
+    URGENT ALERTS
+    ───────────────────────────────────────
+    [Time-sensitive opportunities or write: NONE]
+
+    ───────────────────────────────────────
+    1. TOP CONTENT FORMATS
+    ───────────────────────────────────────
+    [Format] — Relevance: HIGH/MEDIUM/LOW
+    Why it matters for {brand_name}: [1-2 sentences]
+    Specific recommendation: [one concrete action]
+
+    ───────────────────────────────────────
+    2. TOP 5 HASHTAGS
+    ───────────────────────────────────────
+    #[hashtag] — [volume] — Category: [jewelry/sustainability/greek]
+    Relevance: HIGH/MEDIUM/LOW
+    (repeat for all 5)
+
+    ───────────────────────────────────────
+    3. COMPETITOR SIGNALS
+    ───────────────────────────────────────
+    [@handle]
+    Best performing post this week: [description]
+    Format used: [type]
+    Worth responding to: YES/NO
+    If yes: [specific recommendation for {brand_name}]
+    (repeat for each account checked)
+
+    ───────────────────────────────────────
+    4. SUSTAINABILITY & CRAFT
+    ───────────────────────────────────────
+    [Finding] — Relevance: HIGH/MEDIUM/LOW
+    Implication for {brand_name}: [1 sentence]
+  agent: trend_scout
+  output_file: trends/latest_trends.md

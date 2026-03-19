@@ -1,0 +1,17 @@
+# Environments
+venv/
+test_env/
+.env
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Assets & Data
+memory/crew_memory.db
+asset_library/images/*
+!asset_library/images/.gitkeep
+*.zip
+*.zip
