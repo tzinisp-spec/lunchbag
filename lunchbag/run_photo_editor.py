@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.dirname(
 ))
 
 from dotenv import load_dotenv
-from luanchbag.tools.photo_editor_tool import PhotoEditorTool
+from lunchbag.tools.photo_editor_tool import PhotoEditorTool
 
 import sys
 

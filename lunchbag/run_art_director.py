@@ -5,7 +5,7 @@ sys.path.insert(0, os.path.dirname(
 ))
 
 from dotenv import load_dotenv
-from luanchbag.tools.art_director_tool import ArtDirectorTool
+from lunchbag.tools.art_director_tool import ArtDirectorTool
 
 load_dotenv()
 

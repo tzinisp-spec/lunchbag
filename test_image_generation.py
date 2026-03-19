@@ -1,7 +1,7 @@
 import os
 from datetime import date
 from dotenv import load_dotenv
-from luanchbag.tools.image_generator_tool import ImageGeneratorTool
+from lunchbag.tools.image_generator_tool import ImageGeneratorTool
 
 load_dotenv()
 

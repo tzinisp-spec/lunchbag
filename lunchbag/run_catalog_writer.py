@@ -1,6 +1,6 @@
 import os
 from dotenv import load_dotenv
-from luanchbag.tools.catalog_writer_tool import CatalogWriterTool
+from lunchbag.tools.catalog_writer_tool import CatalogWriterTool
 
 load_dotenv()
 

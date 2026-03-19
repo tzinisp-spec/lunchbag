@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.dirname(
 from dotenv import load_dotenv
 load_dotenv()
 
-from luanchbag.tools.catalog_writer_tool import CatalogWriterTool
+from lunchbag.tools.catalog_writer_tool import CatalogWriterTool
 
 print("\n" + "="*50)
 print("  ORPINA — CATALOG WRITER")

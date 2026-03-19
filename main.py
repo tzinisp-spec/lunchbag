@@ -1,8 +1,8 @@
 import os
 from datetime import date
 from dotenv import load_dotenv
-from luanchbag.crew import LuanchbagCrew
-from luanchbag.trend_crew import LuanchbagTrendCrew
+from lunchbag.crew import LuanchbagCrew
+from lunchbag.trend_crew import LuanchbagTrendCrew
 
 load_dotenv()
 

@@ -2,7 +2,7 @@ import os
 import json
 from pathlib import Path
 from datetime import datetime
-from luanchbag.tools.sprint_reporter_tool import SprintReporterTool
+from lunchbag.tools.sprint_reporter_tool import SprintReporterTool
 
 # Configuration
 OUTPUTS_DIR = Path("outputs")
