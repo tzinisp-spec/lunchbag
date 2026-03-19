@@ -17,7 +17,7 @@ build_creative_brief:
     STEP 2 — Write the brief:
     The brief must be driven by two things only:
     1. What the references say visually
-    2. Luanchbag's brand identity and product
+    2. Lunchbag's brand identity and product
 
     Do not introduce seasonal direction.
     Do not introduce occasion or campaign hooks.
@@ -29,7 +29,7 @@ build_creative_brief:
        say about mood, colour, lighting, texture,
        and visual energy. Be specific and visual.
        Quote what you see, not what you assume.
-    2. BRAND FILTER — how Luanchbag's identity should
+    2. BRAND FILTER — how Lunchbag's identity should
        be applied to the reference aesthetic.
        What stays, what gets adapted for the brand.
     3. SHOT TYPE MIX — apply to {images_per_sprint} total:
@@ -61,7 +61,7 @@ build_creative_brief:
        based on {product_focus}.
     5. WHAT THE IMAGES MUST MAKE {target_audience}
        FEEL — derived from the reference aesthetic
-       applied through the Luanchbag brand filter.
+       applied through the Lunchbag brand filter.
     6. MATERIAL NOTE — how the polymer surface of
        the earrings will interact with the lighting
        visible in the reference images.
@@ -249,7 +249,7 @@ create_style_bible:
     - Reference code (with set identifier)
     - Shot type: [WORN] [PRODUCT] [DETAIL] [LIFESTYLE] [HELD]
     - Format: feed (1:1) or story (9:16)
-    - Product: specific Luanchbag earring name
+    - Product: specific Lunchbag earring name
     - Composition: detailed framing instruction — invent
       freely within the aesthetic vocabulary established by
       the composition references. Do not just copy references.
@@ -382,7 +382,7 @@ create_style_bible:
     [SHOOT-SPR26-S1-001]
     Shot Type: [WORN/PRODUCT/DETAIL/LIFESTYLE/HELD]
     Format: [1:1 or 9:16]
-    Product: [specific Luanchbag earring name]
+    Product: [specific Lunchbag earring name]
     Composition: [detailed framing instruction]
     Mood: [feeling]
     Notes: STANDARD or [deviation]

@@ -1,13 +1,13 @@
 import os
 from datetime import date
 from dotenv import load_dotenv
-from lunchbag.crew import LuanchbagCrew
-from lunchbag.trend_crew import LuanchbagTrendCrew
+from lunchbag.crew import LunchbagCrew
+from lunchbag.trend_crew import LunchbagTrendCrew
 
 load_dotenv()
 
 INPUTS = {
-    "brand_name":        "Luanchbag",
+    "brand_name":        "Lunchbag",
     "current_season":    "Spring 2026",
     "product_focus":     "TBD — add products to products/ folder",
     "earring_materials": "TBD — describe product materials here",
@@ -25,7 +25,7 @@ def run_trend_scout():
     print("  ORPINA — TREND SCOUT")
     print("="*60 + "\n")
 
-    LuanchbagTrendCrew().crew().kickoff(inputs=INPUTS)
+    LunchbagTrendCrew().crew().kickoff(inputs=INPUTS)
 
     print("\n" + "="*60)
     print("  DONE: trends/latest_trends.md")
@@ -62,7 +62,7 @@ def run():
     print("  Checkpoint 2: Final package approval")
     print("="*60 + "\n")
 
-    LuanchbagCrew().crew().kickoff(inputs=INPUTS)
+    LunchbagCrew().crew().kickoff(inputs=INPUTS)
 
     print("\n" + "="*60)
     print("  SPRINT COMPLETE")

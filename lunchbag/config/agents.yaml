@@ -179,7 +179,7 @@ qc_inspector:
     Quality Control Inspector for {brand_name}
   goal: >
     Scan every generated image in the asset library. Use the
-    Luanchbag QC Tool to check each one against the product
+    Lunchbag QC Tool to check each one against the product
     references for shape and colour accuracy. Automatically
     fix any mismatches using the tool's integrated
     regeneration feature. Produce a final QC Report that

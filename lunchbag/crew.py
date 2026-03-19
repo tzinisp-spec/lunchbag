@@ -15,9 +15,9 @@ from lunchbag.tools.sprint_reporter_tool import SprintReporterTool
 from lunchbag.tools.catalog_writer_tool import CatalogWriterTool
 
 @CrewBase
-class LuanchbagCrew:
+class LunchbagCrew:
     """
-    Luanchbag main crew — monthly creative sprint.
+    Lunchbag main crew — monthly creative sprint.
     Includes human-in-the-loop checkpoints.
     """
     agents_config = "config/agents.yaml"
