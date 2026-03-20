@@ -5,7 +5,14 @@ from pathlib import Path
 from datetime import datetime
 from crewai.tools import BaseTool
 
-ASSET_DIR    = Path("asset_library/images")
+def _get_asset_dir() -> Path:
+    shoot_folder = os.getenv("SHOOT_FOLDER", "")
+    if shoot_folder:
+        return Path(
+            f"asset_library/images/{shoot_folder}"
+        )
+    return Path("asset_library/images")
+
 OUTPUTS_DIR  = Path("outputs")
 CATALOG_PATH = Path("asset_library/catalog.json")
 SUPPORTED    = {".jpg", ".jpeg", ".png"}
@@ -56,7 +63,7 @@ def _load_existing_catalog() -> dict:
 
 
 class CatalogWriterTool(BaseTool):
-    name: str        = "Orpina Catalog Writer"
+    name: str        = "The Lunchbags Catalog Writer"
     description: str = """
         Writes a JSON catalog of all approved images
         after the Photo Editor review completes.
@@ -72,7 +79,7 @@ class CatalogWriterTool(BaseTool):
             
             # Find all images currently in asset library
             current_files = [
-                f for f in ASSET_DIR.iterdir()
+                f for f in _get_asset_dir().iterdir()
                 if f.is_file()
                 and f.suffix.lower() in SUPPORTED
                 and "TEST-" not in f.name
@@ -86,13 +93,22 @@ class CatalogWriterTool(BaseTool):
                 if "Needs Review-" in f.name or "Art Review-" in f.name:
                     continue
                 
-                # Extract ID (e.g. SHOOT-SPR26-001)
+                # Extract ID (e.g. lunchbag-SPR-26-03-20-S1-001)
                 img_id = f.stem
                 if img_id in seen_ids:
                     continue
                 
                 status = statuses.get(f.name, "unknown")
                 
+                # Sprint ID extraction from new format
+                sprint_id = "unknown"
+                match = re.search(
+                    r"([a-z]+-[A-Z]+-\d+-\d+-\d+)",
+                    f.name,
+                )
+                if match:
+                    sprint_id = match.group(1)
+
                 # Metadata
                 new_images.append({
                     "id":         img_id,
@@ -100,7 +116,7 @@ class CatalogWriterTool(BaseTool):
                     "path":       str(f),
                     "status":     status,
                     "added_at":   datetime.now().isoformat(),
-                    "sprint":     img_id.split("-")[1] if "-" in img_id else "unknown"
+                    "sprint":     sprint_id
                 })
 
             catalog["images"].extend(new_images)

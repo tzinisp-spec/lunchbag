@@ -5,8 +5,15 @@ from pathlib import Path
 from datetime import datetime
 from crewai.tools import BaseTool
 
+def _get_asset_dir() -> Path:
+    shoot_folder = os.getenv("SHOOT_FOLDER", "")
+    if shoot_folder:
+        return Path(
+            f"asset_library/images/{shoot_folder}"
+        )
+    return Path("asset_library/images")
+
 OUTPUTS_DIR  = Path("outputs")
-ASSET_DIR    = Path("asset_library/images")
 CATALOG_PATH = Path("asset_library/catalog.json")
 REPORTS_DIR  = Path("outputs/sprint_reports")
 SUPPORTED    = {".jpg", ".jpeg", ".png"}
@@ -33,55 +40,78 @@ def _parse_photo_editor_report() -> dict:
         "criteria_failures": {
             "product_accuracy":   0,
             "material_correctness": 0,
-            "earring_size":       0,
-            "earring_orientation": 0,
+            "bag_size":       0,
+            "bag_orientation": 0,
             "model_consistency":  0,
             "lighting_realism":   0,
             "composition_intent": 0,
             "anti_ai_check":      0,
+            "composition_reality": 0,
         },
         "fix_attempts": {
             "1": 0,
             "2": 0,
             "3": 0,
         },
+        "image_details": [],
         "errors": [],
     }
 
+    current_image = None
     for line in content.splitlines():
         line = line.strip()
 
-        if re.match(r"[✓✗]\s+PASS\s+\|", line):
+        # Match review lines
+        pass_match = re.match(r"[✓✗]\s+PASS\s+\|\s+(.*)", line)
+        fixed_match = re.match(r"[✓✗]\s+FIXED\s+\|\s+(.*)", line)
+        flagged_match = re.match(r"[✗]\s+FLAGGED\s+\|\s+(.*)", line)
+
+        if pass_match:
+            img_name = pass_match.group(1).split("|")[0].strip()
             result["passed"] += 1
             result["total"]  += 1
-        elif re.match(r"[✓✗]\s+FIXED\s+\|", line):
+            result["image_details"].append({"name": img_name, "status": "PASS", "reviewer": "Photo Editor"})
+        elif fixed_match:
+            parts = fixed_match.group(1).split("|")
+            img_name = parts[0].strip()
             result["fixed"] += 1
             result["total"] += 1
             attempts_match = re.search(r"attempts:\s*(\d)", line)
-            if attempts_match:
-                n = attempts_match.group(1)
-                if n in result["fix_attempts"]:
-                    result["fix_attempts"][n] += 1
-        elif re.match(r"[✗]\s+FLAGGED", line):
+            n = attempts_match.group(1) if attempts_match else "1"
+            if n in result["fix_attempts"]:
+                result["fix_attempts"][n] += 1
+            result["image_details"].append({"name": img_name, "status": "FIXED", "reviewer": "Photo Editor", "attempts": n})
+        elif flagged_match:
+            img_name = flagged_match.group(1).split("|")[0].strip()
             result["flagged"] += 1
             result["total"]   += 1
+            result["image_details"].append({"name": img_name, "status": "FLAGGED", "reviewer": "Photo Editor"})
         elif "FAILED BATCH CHECK" in line.upper():
             result["batch_flagged"] += 1
+
+        # Track issue descriptions if we just started an image block
+        # Note: This parser is simplified; in a real scenario we'd track the last image seen
+        # For now, we'll look for lines following a FLAG that describe the issue.
 
         # Count criteria failures
         criteria_map = {
             "1. PRODUCT ACCURACY: FAIL":    "product_accuracy",
             "2. MATERIAL CORRECTNESS: FAIL": "material_correctness",
-            "3. EARRING SIZE: FAIL":         "earring_size",
-            "4. EARRING ORIENTATION: FAIL":  "earring_orientation",
+            "3. BAG SIZE: FAIL":         "bag_size",
+            "4. BAG ORIENTATION: FAIL":  "bag_orientation",
             "5. MODEL CONSISTENCY: FAIL":    "model_consistency",
             "6. LIGHTING REALISM: FAIL":     "lighting_realism",
             "7. COMPOSITION INTENT: FAIL":   "composition_intent",
             "8. ANTI-AI CHECK: FAIL":        "anti_ai_check",
+            "9. COMPOSITION REALITY CHECK: FAIL": "composition_reality",
         }
         for key, field in criteria_map.items():
             if key in line.upper():
                 result["criteria_failures"][field] += 1
+                if result["image_details"]:
+                    last = result["image_details"][-1]
+                    if last["status"] != "PASS":
+                        last.setdefault("issues", []).append(key.split(":")[0].strip())
 
         if "TOOL_ERROR" in line:
             result["errors"].append(line)
@@ -104,6 +134,7 @@ def _parse_art_director_report() -> dict:
             "lighting_drift":    0,
             "mood_drift":        0,
         },
+        "image_details": [],
         "batch_observations": [],
         "errors": [],
     }
@@ -111,21 +142,35 @@ def _parse_art_director_report() -> dict:
     for line in content.splitlines():
         line = line.strip()
 
-        if re.search(r"[✓]\s+PASS\s+\|", line):
+        pass_match = re.search(r"[✓]\s+PASS\s+\|\s+(.*)", line)
+        flag_match = re.search(r"[✗]\s+FLAGGED\s+\|\s+(.*)", line)
+
+        if pass_match:
+            img_name = pass_match.group(1).strip()
             result["passed"] += 1
             result["total"]  += 1
-        elif re.search(r"[✗]\s+FLAGGED\s+\|", line):
+            result["image_details"].append({"name": img_name, "status": "PASS", "reviewer": "Art Director"})
+        elif flag_match:
+            img_name = flag_match.group(1).strip()
             result["flagged"] += 1
             result["total"]  += 1
+            result["image_details"].append({"name": img_name, "status": "FLAGGED", "reviewer": "Art Director"})
 
         if re.search(r"COMPOSITION DRIFT.*FLAG", line, re.IGNORECASE):
             result["drift_types"]["composition_drift"] += 1
+            if result["image_details"]: result["image_details"][-1].setdefault("issues", []).append("Composition Drift")
 
         if re.search(r"LIGHTING DRIFT.*FLAG", line, re.IGNORECASE):
             result["drift_types"]["lighting_drift"] += 1
+            if result["image_details"]: result["image_details"][-1].setdefault("issues", []).append("Lighting Drift")
 
         if re.search(r"MOOD DRIFT.*FLAG", line, re.IGNORECASE):
             result["drift_types"]["mood_drift"] += 1
+            if result["image_details"]: result["image_details"][-1].setdefault("issues", []).append("Mood Drift")
+
+        if re.search(r"REGENERATION NOTE:\s*(.*)", line, re.IGNORECASE):
+            note = re.search(r"REGENERATION NOTE:\s*(.*)", line, re.IGNORECASE).group(1)
+            if result["image_details"]: result["image_details"][-1]["fix_instruction"] = note
 
         if re.search(r"^-?\s*Batch\s+\d+:", line, re.IGNORECASE):
             result["batch_observations"].append(
@@ -136,6 +181,215 @@ def _parse_art_director_report() -> dict:
             result["errors"].append(line)
 
     return result
+
+
+def _parse_image_level_details() -> list[dict]:
+    """
+    Parse per-image details from Photo Editor
+    and Art Director reports.
+    Returns list of dicts with full per-image
+    history including issues, fixes, and
+    final status.
+    """
+    results = []
+    pe_path = OUTPUTS_DIR / "photo_editor_latest.md"
+    ad_path = OUTPUTS_DIR / "art_director_latest.md"
+
+    if not pe_path.exists():
+        return results
+
+    pe_content = pe_path.read_text()
+    ad_content = (
+        ad_path.read_text()
+        if ad_path.exists()
+        else ""
+    )
+
+    # Parse Photo Editor per-image blocks
+    # Each block starts with ✓ or ✗ and filename
+    current_image = None
+
+    for line in pe_content.splitlines():
+        # Detect new image entry
+        img_match = re.search(
+            r"([✓✗])\s+(PASS|FIXED|FLAGGED(?:_BATCH)?)"
+            r"\s+\|\s+(.+?)(?:\s+\||$)",
+            line.strip(),
+        )
+        if img_match:
+            # Save previous block
+            if current_image:
+                results.append(current_image)
+
+            status    = img_match.group(2)
+            filename  = img_match.group(3).strip()
+
+            current_image = {
+                "filename":       filename,
+                "pe_status":      status,
+                "pe_failures":    [],
+                "pe_fix":         "",
+                "pe_fix_attempts": 0,
+                "ad_status":      "NOT_REVIEWED",
+                "ad_issues":      [],
+                "ad_regen_note":  "",
+                "final_status":   "",
+            }
+            continue
+
+        if current_image:
+            # Parse criteria failures
+            for crit in [
+                "1. PATTERN ACCURACY",
+                "2. FABRIC QUALITY",
+                "3. BAG SIZE AND SCALE",
+                "4. HARDWARE AND DETAIL FIDELITY",
+                "5. MODEL CONSISTENCY",
+                "6. LIGHTING REALISM",
+                "7. COMPOSITION INTENT",
+                "8. ANTI-AI CHECK",
+                "9. COMPOSITION REALITY CHECK",
+            ]:
+                if (
+                    crit in line.upper()
+                    and "FAIL" in line.upper()
+                ):
+                    reason = (
+                        line.split("—", 1)[-1].strip()
+                        if "—" in line
+                        else line
+                    )
+                    current_image["pe_failures"].append(
+                        f"{crit}: {reason}"
+                    )
+
+            # Parse fix instruction
+            if "FIX APPLIED:" in line.upper():
+                current_image["pe_fix"] = (
+                    line.split(":", 1)[-1].strip()
+                )
+
+            # Parse fix attempts
+            attempts_match = re.search(
+                r"attempts:\s*(\d)", line
+            )
+            if attempts_match:
+                current_image["pe_fix_attempts"] = int(
+                    attempts_match.group(1)
+                )
+
+            # Parse batch check failure
+            if "FAILED BATCH CHECK:" in line.upper():
+                current_image["pe_failures"].append(
+                    line.strip()
+                )
+
+    # Save last block
+    if current_image:
+        results.append(current_image)
+
+    # Parse Art Director per-image blocks
+    if ad_content:
+        ad_current = None
+        for line in ad_content.splitlines():
+            ad_match = re.search(
+                r"([✓✗])\s+(PASS|FLAGGED)\s+\|\s+(.+?)(?:\s+\||$)",
+                line.strip(),
+            )
+            if ad_match:
+                ad_current = ad_match.group(3).strip()
+                status     = ad_match.group(2)
+
+                # Match to existing result
+                for r in results:
+                    pe_clean_name = r["filename"]
+                    for prefix in ["Needs Review-", "Art Review-"]:
+                        if pe_clean_name.startswith(prefix):
+                            pe_clean_name = pe_clean_name[len(prefix):]
+                    
+                    ad_clean_name = ad_current
+                    for prefix in ["Art Review-"]:
+                        if ad_clean_name.startswith(prefix):
+                            ad_clean_name = ad_clean_name[len(prefix):]
+
+                    if (
+                        r["filename"] == ad_current
+                        or pe_clean_name == ad_clean_name
+                    ):
+                        r["ad_status"] = status
+                        break
+
+            # Parse drift issues
+            if ad_current:
+                for drift in [
+                    "COMPOSITION DRIFT: FLAG",
+                    "LIGHTING DRIFT: FLAG",
+                    "MOOD DRIFT: FLAG",
+                ]:
+                    if drift in line.upper():
+                        reason = (
+                            line.split("—", 1)[-1].strip()
+                            if "—" in line
+                            else line
+                        )
+                        for r in results:
+                            pe_clean_name = r["filename"]
+                            for prefix in ["Needs Review-", "Art Review-"]:
+                                if pe_clean_name.startswith(prefix):
+                                    pe_clean_name = pe_clean_name[len(prefix):]
+                            
+                            ad_clean_name = ad_current
+                            for prefix in ["Art Review-"]:
+                                if ad_clean_name.startswith(prefix):
+                                    ad_clean_name = ad_clean_name[len(prefix):]
+
+                            if (
+                                r["filename"] == ad_current
+                                or pe_clean_name == ad_clean_name
+                            ):
+                                r["ad_issues"].append(
+                                    f"{drift}: {reason}"
+                                )
+                                break
+
+                if "REGENERATION NOTE:" in line.upper():
+                    note = line.split(":", 1)[-1].strip()
+                    for r in results:
+                        pe_clean_name = r["filename"]
+                        for prefix in ["Needs Review-", "Art Review-"]:
+                            if pe_clean_name.startswith(prefix):
+                                pe_clean_name = pe_clean_name[len(prefix):]
+                        
+                        ad_clean_name = ad_current
+                        for prefix in ["Art Review-"]:
+                            if ad_clean_name.startswith(prefix):
+                                ad_clean_name = ad_clean_name[len(prefix):]
+
+                        if (
+                            r["filename"] == ad_current
+                            or pe_clean_name == ad_clean_name
+                        ):
+                            r["ad_regen_note"] = note
+                            break
+
+    # Determine final status for each image
+    for r in results:
+        if r["pe_status"] == "PASS" and (
+            r["ad_status"] in ("PASS", "NOT_REVIEWED")
+        ):
+            r["final_status"] = "APPROVED"
+        elif r["pe_status"] == "FIXED" and (
+            r["ad_status"] in ("PASS", "NOT_REVIEWED")
+        ):
+            r["final_status"] = "APPROVED_AFTER_FIX"
+        elif "FLAGGED" in r["pe_status"]:
+            r["final_status"] = "NEEDS_MANUAL_REVIEW"
+        elif r["ad_status"] == "FLAGGED":
+            r["final_status"] = "ART_REVIEW_FLAGGED"
+        else:
+            r["final_status"] = "UNKNOWN"
+
+    return results
 
 
 def _parse_catalog() -> dict:
@@ -149,13 +403,13 @@ def _parse_catalog() -> dict:
 
 
 def _count_asset_library() -> dict:
-    if not ASSET_DIR.exists():
+    if not _get_asset_dir().exists():
         return {
             "total": 0, "approved": 0,
             "needs_review": 0, "art_review": 0,
         }
     files = [
-        f for f in ASSET_DIR.iterdir()
+        f for f in _get_asset_dir().iterdir()
         if f.is_file()
         and f.suffix.lower() in SUPPORTED
         and "TEST-" not in f.name
@@ -249,7 +503,7 @@ def _estimate_costs(
 
 
 class SprintReporterTool(BaseTool):
-    name: str        = "Orpina Sprint Reporter"
+    name: str        = "The Lunchbags Sprint Reporter"
     description: str = """
         Generates a comprehensive Markdown Sprint Report
         at the end of every sprint. Synthesises all sprint 
@@ -350,7 +604,7 @@ class SprintReporterTool(BaseTool):
             }
 
             report = (
-                f"# SPRINT REPORT — ORPINA\n"
+                f"# SPRINT REPORT — THE LUNCHBAGS\n"
                 f"Sprint: {sprint_id}\n"
                 f"Date: {now.strftime('%Y-%m-%d')}\n\n"
                 f"{'='*55}\n"
@@ -446,6 +700,69 @@ class SprintReporterTool(BaseTool):
             else:
                 report += "No creative drift recorded.\n"
 
+            # ── Parse image level details ─────────────
+            image_details = _parse_image_level_details()
+
+            report += (
+                f"\n{'='*55}\n"
+                f"## 6b. PER-IMAGE QUALITY REPORT\n"
+                f"{'='*55}\n\n"
+                f"Full history of every image reviewed "
+                f"this sprint — issues found, fixes "
+                f"applied, and final status.\n\n"
+            )
+
+            if not image_details:
+                report += "No image details available.\n\n"
+            else:
+                # Group by final status
+                approved      = [
+                    r for r in image_details
+                    if r["final_status"] == "APPROVED"
+                ]
+                approved_fix  = [
+                    r for r in image_details
+                    if r["final_status"] == "APPROVED_AFTER_FIX"
+                ]
+                manual_review = [
+                    r for r in image_details
+                    if r["final_status"] == "NEEDS_MANUAL_REVIEW"
+                ]
+                art_flagged   = [
+                    r for r in image_details
+                    if r["final_status"] == "ART_REVIEW_FLAGGED"
+                ]
+
+                if approved:
+                    report += "### ✅ Approved (First Pass)\n"
+                    for r in approved:
+                        report += f"- `{r['filename']}`\n"
+                    report += "\n"
+
+                if approved_fix:
+                    report += "### 🛠 Approved (After Automated Fix)\n"
+                    report += "| Image | PE Failures | Fix Applied | Attempts |\n|---|---|---|---|\n"
+                    for r in approved_fix:
+                        fails = ", ".join(r["pe_failures"]) if r["pe_failures"] else "None"
+                        report += f"| `{r['filename']}` | {fails} | {r['pe_fix']} | {r['pe_fix_attempts']} |\n"
+                    report += "\n"
+
+                if art_flagged:
+                    report += "### 🎨 Art Director Flagged (Needs Rework)\n"
+                    report += "| Image | Creative Issues | Regeneration Note |\n|---|---|---|\n"
+                    for r in art_flagged:
+                        issues = ", ".join(r["ad_issues"]) if r["ad_issues"] else "Mood/Lighting Drift"
+                        report += f"| `{r['filename']}` | {issues} | {r['ad_regen_note']} |\n"
+                    report += "\n"
+
+                if manual_review:
+                    report += "### ✗ Flagged for Manual Review\n"
+                    report += "| Image | Final PE Failure | Fix Attempted |\n|---|---|---|\n"
+                    for r in manual_review:
+                        fails = ", ".join(r["pe_failures"]) if r["pe_failures"] else "Failed review"
+                        report += f"| `{r['filename']}` | {fails} | {r['pe_fix'] or 'N/A'} |\n"
+                    report += "\n"
+
             report += (
                 f"\n{'='*55}\n"
                 f"## 7. API USAGE & ESTIMATED COST\n"
@@ -467,7 +784,30 @@ class SprintReporterTool(BaseTool):
 
             report += (
                 f"\n{'='*55}\n"
-                f"## 9. RECOMMENDATIONS FOR NEXT SPRINT\n"
+                f"## 9. DETAILED IMAGE REVIEWS\n"
+                f"{'='*55}\n\n"
+                f"This section details specific issues found by the Photo Editor and Art Director reviewers.\n\n"
+                f"| Image | Reviewer | Status | Issues Found | Fix / Instruction |\n"
+                f"|---|---|---|---|---|\n"
+            )
+
+            all_details = pe_data.get("image_details", []) + ad_data.get("image_details", [])
+            if all_details:
+                for det in all_details:
+                    issues = ", ".join(det.get("issues", [])) if det.get("issues") else "None"
+                    fix = det.get("fix_instruction") or det.get("attempts", "")
+                    if det["status"] == "FIXED":
+                        fix = f"Fixed ({det['attempts']} attempts)"
+                    elif not fix:
+                        fix = "N/A"
+                    
+                    report += f"| {det['name']} | {det['reviewer']} | {det['status']} | {issues} | {fix} |\n"
+            else:
+                report += "No detailed image review data found.\n"
+
+            report += (
+                f"\n{'='*55}\n"
+                f"## 10. RECOMMENDATIONS FOR NEXT SPRINT\n"
                 f"{'='*55}\n\n"
             )
             for rec in recommendations: report += f"- {rec}\n"

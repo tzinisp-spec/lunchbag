@@ -7,21 +7,67 @@ from crewai.tools import BaseTool
 from google import genai
 from google.genai import types
 
-ASSET_DIR      = Path("asset_library/images")
+def _get_asset_dir() -> Path:
+    """
+    Returns the shoot-specific asset directory.
+    Reads shoot_folder from environment or
+    falls back to 'images' root.
+    """
+    shoot_folder = os.getenv("SHOOT_FOLDER", "")
+    if shoot_folder:
+        return Path(
+            f"asset_library/images/{shoot_folder}"
+        )
+    return Path("asset_library/images")
+
 PRODUCTS_DIR   = Path("products")
 REFS_DIR       = Path("references")
 OUTPUTS_DIR    = Path("outputs")
 SUPPORTED      = {".jpg", ".jpeg", ".png"}
 
 TECHNICAL_ANCHOR = (
-    "Photorealistic high-end editorial photography. "
-    "The earring is the absolute hero of the image. "
-    "Reproduce the earring from the product reference "
-    "with perfect fidelity — identical shape, colour, "
-    "and form. The earring must be fully visible and "
-    "sharply in focus at all times. "
-    "Maximum realism. No text overlays. No watermarks. "
-    "No AI-looking plastic or flat surfaces."
+    "Photorealistic high-end lifestyle photography. "
+    "The bag is the absolute hero of the image. "
+    "Reproduce the bag from the product reference "
+    "with perfect fidelity — this is non-negotiable:\n"
+    "PATTERN: The print pattern on the bag must be "
+    "IDENTICAL to the product reference. Same motifs, "
+    "same colours, same scale, same arrangement. "
+    "A different pattern = wrong product.\n"
+    "FABRIC: The cotton exterior must look like real "
+    "woven cotton — visible fabric texture, natural "
+    "drape, soft matte surface. Not leather, not "
+    "plastic, not synthetic. The fabric weave should "
+    "be visible in close-up shots.\n"
+    "DETAILS: Reproduce all visible details from the "
+    "product reference — zip, handles, strap, seams, "
+    "any branding. Do not invent or omit details.\n"
+    "HARDWARE: Reproduce only the hardware "
+    "visible in the product reference — exact "
+    "number of zippers, exact straps and handles, "
+    "exact clips and closures. Do not add any "
+    "hardware not present in the reference. "
+    "A bag with an extra zipper or extra "
+    "is the wrong product.\n"
+    "SHAPE: The bag must hold its correct form — "
+    "H21cm x W16cm x D24cm rectangular with slight "
+    "natural softness from the cotton. Not collapsed, "
+    "not overly rigid.\n"
+    "SIZE AND SCALE: The bag is a compact lunch "
+    "bag — H21cm x W16cm x D24cm, approximately "
+    "the size of a small handbag or a large "
+    "lunchbox. When held in one hand it should "
+    "fit comfortably with fingers wrapping around "
+    "the top handle — it is NOT a large tote, "
+    "NOT a backpack, NOT a shopping bag. When "
+    "carried by a model it should sit naturally "
+    "at hip height if held at arm's length, or "
+    "at waist height if carried short. The bag "
+    "should never appear larger than a model's "
+    "torso or wider than her shoulders. "
+    "If the scale looks unrealistic compared to "
+    "the human body — regenerate.\n"
+    "Maximum realism. No text overlays. No watermarks."
 )
 
 
@@ -69,6 +115,23 @@ def _extract_shoot_dna() -> str:
         return block
 
     return ""
+
+
+def _read_concept() -> str:
+    """Read campaign concept if present."""
+    path = Path("concept.md")
+    if not path.exists():
+        return ""
+    content = path.read_text()
+    lines = [
+        l for l in content.splitlines()
+        if not l.strip().startswith("#")
+        and not l.strip().startswith("<!--")
+        and not l.strip().startswith("-->")
+        and l.strip() != ""
+    ]
+    concept = "\n".join(lines).strip()
+    return concept if concept else ""
 
 
 def _extract_set_dnas() -> list[str]:
@@ -129,11 +192,12 @@ def _get_first_generated_image() -> tuple[bytes, str] | None:
     Excludes TEST- images.
     Returns (bytes, mime_type) or None if none exist yet.
     """
-    if not ASSET_DIR.exists():
+    asset_dir = _get_asset_dir()
+    if not asset_dir.exists():
         return None
 
     files = sorted([
-        f for f in ASSET_DIR.iterdir()
+        f for f in asset_dir.iterdir()
         if f.is_file()
         and f.suffix.lower() in SUPPORTED
         and "TEST-" not in f.name
@@ -154,7 +218,7 @@ def _get_first_generated_image() -> tuple[bytes, str] | None:
 _GENERATION_COUNTER = 0
 
 class ImageGeneratorTool(BaseTool):
-    name: str = "Orpina Image Generator"
+    name: str = "The Lunchbags Image Generator"
     description: str = """
         Generates a photoshoot image using Nano Banana Pro
         (gemini-3-pro-image-preview) via the Gemini API.
@@ -236,6 +300,13 @@ class ImageGeneratorTool(BaseTool):
             # Shoot DNA defines the world — refs inspired it
             # but are no longer passed directly to generation
 
+            # Load max 1 reference image
+            # to avoid overloading Nano Banana
+            all_refs = _load_folder_images(REFS_DIR)
+            ref_images = all_refs[:1]
+            ref_count = len(ref_images)
+
+            # ── Build prompt ──────────────────────────────
             if set_dna:
                 world_block = (
                     f"THE WORLD OF THIS SET:\n"
@@ -250,94 +321,49 @@ class ImageGeneratorTool(BaseTool):
             else:
                 world_block = (
                     "Create a photorealistic editorial "
-                    "jewelry photograph with warm "
+                    "lifestyle product photograph with warm "
                     "Mediterranean mood, natural directional "
                     "lighting, and a minimal clean setting.\n\n"
                 )
 
-            if anchor:
-                anchor_instruction = (
-                    "CONSISTENCY ANCHOR:\n"
-                    "The second image provided is an already "
-                    "approved image from this shoot. Match it "
-                    "precisely on these four dimensions:\n"
-                    "1. COLOUR GRADE: Match the overall tonal "
-                    "treatment exactly — if the anchor is warm "
-                    "and slightly desaturated, this image must "
-                    "be too. If it is cool and high contrast, "
-                    "match that. Do not introduce a different "
-                    "colour grade.\n"
-                    "2. EXPOSURE: Match the overall brightness "
-                    "level of the anchor exactly. Do not make "
-                    "this image brighter or darker.\n"
-                    "3. SHADOW TREATMENT: Match the shadow "
-                    "quality, direction, and density of the "
-                    "anchor. If shadows are soft and subtle "
-                    "in the anchor, they must be here too.\n"
-                    "4. SKIN TONE RENDERING: If a model appears "
-                    "in the anchor, match the skin tone "
-                    "rendering — warmth, smoothness, and "
-                    "overall treatment must feel identical.\n"
-                    "These four dimensions must be locked "
-                    "across every image in the sprint. "
-                    "Only composition and earring placement "
-                    "should differ.\n\n"
+            concept = _read_concept()
+            if concept:
+                concept_block = (
+                    f"CAMPAIGN CONCEPT:\n"
+                    f"{concept}\n\n"
+                    f"Every image in this sprint tells "
+                    f"this story. The situation, setting, "
+                    f"and narrative described above must "
+                    f"be present in the generated image.\n\n"
                 )
             else:
-                anchor_instruction = (
-                    "This is the FIRST image of the sprint. "
-                    "Establish the visual world clearly and "
-                    "deliberately — pay close attention to:\n"
-                    "1. COLOUR GRADE: Set a clear tonal "
-                    "treatment that feels true to the shoot "
-                    "concept. This will be the reference grade "
-                    "for every subsequent image.\n"
-                    "2. EXPOSURE: Set a natural, well-exposed "
-                    "baseline that works across different "
-                    "compositions.\n"
-                    "3. SHADOW TREATMENT: Establish a clear "
-                    "shadow quality and direction consistent "
-                    "with the lighting spec.\n"
-                    "4. SKIN TONE RENDERING: If a model "
-                    "appears, render skin tone naturally and "
-                    "consistently — this sets the standard "
-                    "for all subsequent model shots.\n"
-                    "This first image is the visual anchor "
-                    "for the entire sprint. Make it count.\n\n"
-                )
+                concept_block = ""
 
             full_prompt = (
-                f"IMAGE REFERENCES PROVIDED:\n"
-                f"IMAGE 1 — PRODUCT: The exact Orpina earring "
-                f"({product_name}). Reproduce with perfect "
-                f"fidelity — identical shape, colour, form.\n"
+                f"IMAGE REFERENCES:\n"
+                f"IMAGE 1: Product — reproduce this "
+                f"bag exactly: same pattern, fabric, "
+                f"shape, hardware.\n"
             )
 
-            if anchor:
+            for i in range(ref_count):
                 full_prompt += (
-                    f"IMAGE 2 — CONSISTENCY ANCHOR: An approved "
-                    f"image from this shoot. Match the model, "
-                    f"location, and mood exactly.\n"
+                    f"IMAGE {i+2}: Style reference — "
+                    f"recreate this scene with our bag.\n"
                 )
 
             full_prompt += (
                 f"\n{world_block}"
-                f"{anchor_instruction}"
-                f"TECHNICAL REQUIREMENTS:\n"
-                f"{TECHNICAL_ANCHOR}\n\n"
-                f"COMPOSITION FOR THIS SHOT:\n"
-                f"{creative_prompt}\n\n"
-                f"IMPORTANT: The references inspired this shoot "
-                f"conceptually. Do not replicate them literally. "
-                f"Create something new that lives in the same "
-                f"visual world — same model, mood, and light — "
-                f"but with a fresh composition unique to this shot."
+                f"{concept_block}"
+                f"COMPOSITION: {creative_prompt}\n\n"
+                f"Place our exact bag into a scene "
+                f"inspired by the style references. "
+                f"Match the setting, lighting and mood. "
+                f"Bag pattern must be identical to "
+                f"product reference."
             )
 
             # ── Build content parts ───────────────────────
-            # Order: product, anchor (if exists), prompt
-            # Note: style refs NOT passed to generation —
-            # their essence lives in the Shoot DNA text block
             parts_list = []
 
             # Product reference
@@ -350,61 +376,84 @@ class ImageGeneratorTool(BaseTool):
                 )
             )
 
-            # Consistency anchor (first generated image)
-            if anchor:
-                anchor_bytes, anchor_mime = anchor
+            # Style reference
+            for ref_bytes, ref_mime, ref_name in ref_images:
                 parts_list.append(
                     types.Part(
                         inline_data=types.Blob(
-                            mime_type=anchor_mime,
-                            data=anchor_bytes,
+                            mime_type=ref_mime,
+                            data=ref_bytes,
                         )
                     )
                 )
 
-            # Prompt last
+            # Prompt LAST
             parts_list.append(types.Part(text=full_prompt))
 
+            print(f"[ImageGenerator] Sending request for {ref_code}...")
+            print(f"[ImageGenerator] - Product: {product_name}")
+            print(f"[ImageGenerator] - Style Refs: {ref_count}")
+            print(f"[ImageGenerator] - Prompt Length: {len(full_prompt)} chars")
+
             # ── Call Nano Banana Pro ──────────────────────
-            client = genai.Client(
-                api_key=os.getenv("GEMINI_API_KEY")
-            )
+            api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+            if not api_key:
+                return "TOOL_ERROR: API key not found in environment (tried GEMINI_API_KEY and GOOGLE_API_KEY)."
+
+            client = genai.Client(api_key=api_key)
 
             # Stay under 20 RPM rate limit
             # 4 seconds = max 15 RPM — safe headroom
             time.sleep(4)
 
-            response = client.models.generate_content(
-                model="gemini-3-pro-image-preview",
-                contents=[
-                    types.Content(
-                        role="user",
-                        parts=parts_list,
-                    )
-                ],
-                config=types.GenerateContentConfig(
-                    response_modalities=["IMAGE", "TEXT"],
-                    temperature=0.8,
-                ),
-            )
+            try:
+                response = client.models.generate_content(
+                    model="gemini-3-pro-image-preview",
+                    contents=[
+                        types.Content(
+                            role="user",
+                            parts=parts_list,
+                        )
+                    ],
+                    config=types.GenerateContentConfig(
+                        response_modalities=["IMAGE", "TEXT"],
+                        temperature=0.7,
+                    ),
+                )
+            except Exception as api_err:
+                print(f"[ImageGenerator] API Call Failed: {api_err}")
+                return f"TOOL_ERROR: API call failed: {str(api_err)}"
 
             # ── Extract image ─────────────────────────────
             image_data = None
-            if response.candidates and response.candidates[0].content:
-                for part in response.candidates[0].content.parts:
-                    if part.inline_data:
-                        image_data = part.inline_data.data
-                        break
-
-            if not image_data:
-                return (
-                    "TOOL_ERROR: No image returned. "
-                    "Try simplifying the creative prompt."
-                )
+            response_text = ""
+            
+            if response.candidates:
+                if response.candidates[0].content:
+                    for part in response.candidates[0].content.parts:
+                        if part.inline_data:
+                            image_data = part.inline_data.data
+                        if part.text:
+                            response_text += part.text
+                
+                if not image_data:
+                    # Check finish reason
+                    finish_reason = response.candidates[0].finish_reason
+                    print(f"[ImageGenerator] FAILED for {ref_code}. Finish Reason: {finish_reason}. Text: {response_text}")
+                    return (
+                        f"TOOL_ERROR: No image returned. Finish reason: {finish_reason}. "
+                        f"Text: {response_text[:200]}"
+                    )
+            else:
+                print(f"[ImageGenerator] FAILED for {ref_code}. No candidates in response.")
+                return "TOOL_ERROR: No candidates in response from API."
 
             # ── Save and verify ───────────────────────────
-            ASSET_DIR.mkdir(parents=True, exist_ok=True)
-            file_path = ASSET_DIR / f"{ref_code}.png"
+            asset_dir = _get_asset_dir()
+            asset_dir.mkdir(parents=True, exist_ok=True)
+            
+            shoot_id = os.getenv("SHOOT_ID", "SHOOT")
+            file_path = asset_dir / f"{shoot_id}-{ref_code}.png"
 
             max_save_attempts = 3
             saved_successfully = False

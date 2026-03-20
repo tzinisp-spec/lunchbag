@@ -67,7 +67,7 @@ class CompositionReaderTool(BaseTool):
 
             analysis_prompt = (
                 "You are a creative director analysing a set of "
-                "reference images for a jewelry brand photoshoot. "
+                "reference images for a lifestyle product brand photoshoot. "
                 "Analyse all provided images together and extract the "
                 "unified composition rules that govern this visual "
                 "language:\n\n"

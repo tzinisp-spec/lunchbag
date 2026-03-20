@@ -8,7 +8,14 @@ from crewai.tools import BaseTool
 from google import genai
 from google.genai import types
 
-ASSET_DIR    = Path("asset_library/images")
+def _get_asset_dir() -> Path:
+    shoot_folder = os.getenv("SHOOT_FOLDER", "")
+    if shoot_folder:
+        return Path(
+            f"asset_library/images/{shoot_folder}"
+        )
+    return Path("asset_library/images")
+
 PRODUCTS_DIR = Path("products")
 OUTPUTS_DIR  = Path("outputs")
 REPORTS_DIR  = Path("outputs/photo_editor_reports")
@@ -136,83 +143,163 @@ def _review_image(
     )
 
     review_prompt = (
-        "You are a Photo Editor and Stylist reviewing "
-        "images for Orpina, a jewelry brand that makes "
-        "3D printed polymer earrings.\n\n"
-        "IMPORTANT MATERIAL CONTEXT:\n"
-        "Orpina earrings are made from 3D printed "
-        "eco-friendly polymer. They have a matte to satin "
-        "surface finish. They are NOT metallic, NOT shiny "
-        "plastic, NOT glossy. They are lightweight with "
-        "bold solid colours. Any image showing metallic, "
-        "mirror-like, or high-gloss earrings is wrong.\n\n"
+        "You are a Photo Editor and Stylist "
+        "reviewing images for The Lunchbags, "
+        "a brand making cotton thermal lunch bags "
+        "with distinctive graphic prints.\n\n"
+        "CRITICAL MATERIAL CONTEXT:\n"
+        "The Lunchbags are made from cotton with "
+        "a waterproof interior. The exterior has "
+        "a soft woven textile surface with bold "
+        "graphic prints. They are NOT leather, "
+        "NOT plastic, NOT glossy. The fabric "
+        "texture should be clearly visible. "
+        "The print pattern must match the product "
+        "reference EXACTLY — wrong pattern = "
+        "wrong product.\n\n"
         f"IMAGES PROVIDED:\n"
-        f"- First {len(product_images)} image(s): PRODUCT "
-        f"REFERENCE — the exact earring that must appear\n"
+        f"- First {len(product_images)} image(s): "
+        f"PRODUCT REFERENCE — the exact bag that "
+        f"must appear\n"
         f"{anchor_instruction}"
         f"- LAST IMAGE: the photograph to review\n\n"
         f"SHOOT CONCEPT: {shoot_concept}\n\n"
-        "Review the LAST IMAGE against these 8 criteria:\n\n"
-        "1. PRODUCT ACCURACY\n"
-        "Does the earring match the product reference in "
-        "shape and colour? A completely different design "
-        "or colour = fail.\n\n"
-        "2. MATERIAL CORRECTNESS\n"
-        "Does the earring surface look like matte to satin "
-        "polymer? Check: it should NOT look metallic, "
-        "mirror-like, or high-gloss plastic. It should "
-        "have a subtle, soft surface quality consistent "
-        "with 3D printed polymer. Metallic or glossy = fail.\n\n"
-        "3. EARRING SIZE\n"
-        "Is the earring a realistic size relative to the "
-        "model's ear or the surface it sits on? "
-        "Earrings should look wearable — not oversized "
-        "like a prop, not so tiny they disappear. "
-        "Unrealistic scale = fail.\n\n"
-        "4. EARRING ORIENTATION\n"
-        "Does the earring hang or sit naturally? "
-        "Check for: twisted at an impossible angle, "
-        "floating unnaturally, warped shape, or looking "
-        "physically implausible. Unnatural orientation "
-        "= fail.\n\n"
+        "Review the LAST IMAGE against these "
+        "8 criteria:\n\n"
+        "1. PATTERN ACCURACY\n"
+        "Does the print pattern on the bag match "
+        "the product reference? Check motifs, "
+        "colours, and overall design. "
+        "Allow for natural variation caused by "
+        "lighting, angle, and fabric drape — "
+        "a pattern that appears slightly darker "
+        "or lighter due to shadows is acceptable. "
+        "Fail only if: the pattern design is "
+        "fundamentally different, wrong motifs, "
+        "completely wrong colours, or the pattern "
+        "appears to be a different product entirely. "
+        "Lighting variation on same pattern = pass.\n\n"
+        "2. FABRIC QUALITY\n"
+        "Does the bag surface look like real "
+        "woven cotton? It should have visible "
+        "fabric texture, natural matte finish, "
+        "soft drape. Leather-looking, plastic, "
+        "or glossy surface = fail.\n\n"
+        "3. BAG SIZE AND SCALE\n"
+        "Is the bag a realistic size relative "
+        "to the model's hand, arm, or body? "
+        "The bag is H21cm x W16cm x D24cm — "
+        "approximately the size of a small "
+        "handbag. It should fit comfortably "
+        "in one hand. It must never appear "
+        "larger than the model's torso or "
+        "wider than her shoulders. "
+        "Oversized, giant-looking bag = fail. "
+        "The bag shape should be rectangular "
+        "with natural cotton softness — not "
+        "collapsed, not rigidly geometric.\n\n"
+        "4. HARDWARE AND DETAIL FIDELITY\n"
+        "Compare every visible hardware detail "
+        "on the bag against the product reference. "
+        "Check each of these specifically:\n"
+        "- ZIPPERS: Count the zippers. Does the "
+        "generated bag have exactly the same "
+        "number as the product reference? "
+        "Extra zipper not in reference = fail.\n"
+        "- STRAPS AND HANDLES: Does the bag have "
+        "exactly the same straps and handles as "
+        "the reference? Extra strap, missing "
+        "handle, different handle style = fail.\n"
+        "- CLIPS AND CLOSURES: Are the clips, "
+        "buckles, or closures identical to the "
+        "reference in number and position? "
+        "Extra clip or missing clip = fail.\n"
+        "- SEAMS AND PANELS: Does the bag have "
+        "the same panel structure and seam "
+        "placement as the reference?\n"
+        "- BRANDING: Any logos or labels must "
+        "match the reference exactly or be "
+        "absent if not in reference.\n"
+        "ANY invented hardware not present in "
+        "the product reference = fail. "
+        "ANY missing hardware visible in the "
+        "product reference = fail.\n\n"
         "5. MODEL CONSISTENCY\n"
-        "If a model appears, does she look like the same "
-        "person as in the anchor image? Check ethnicity, "
-        "hair colour, and skin tone. Skip if no anchor.\n\n"
+        "If a model appears, does she look like "
+        "the same person as in the anchor image? "
+        "Skip if no anchor.\n\n"
         "6. LIGHTING REALISM\n"
-        "Does the lighting feel like a real photograph? "
-        "Flat, overlit, or obviously AI-generated = fail.\n\n"
+        "Does the lighting feel like a real "
+        "lifestyle photograph? Flat, overlit, "
+        "or AI-looking = fail.\n\n"
         "7. COMPOSITION INTENT\n"
-        "Does the composition feel deliberate? Does the "
-        "earring have clear visual prominence? "
+        "Does the composition feel deliberate? "
+        "Is the bag clearly prominent? "
         "Random or cluttered = fail.\n\n"
         "8. ANTI-AI CHECK\n"
-        "Does the image look AI-generated? Check: "
-        "plastic skin, impossible geometry, blurry hands, "
-        "unnatural hair, warped backgrounds. "
-        "Looks like a real photograph = pass.\n\n"
-        "For each criterion respond PASS or FAIL with "
-        "one sentence reason.\n"
-        "Then give an OVERALL verdict: PASS or FIX\n"
-        "FIX if ANY single criterion fails.\n"
-        "If FIX: write a FIX INSTRUCTION — one specific "
-        "sentence telling Nano Banana exactly what to "
-        "change to fix the most critical issue. "
-        "For material issues say exactly: "
-        "'Change the earring surface from [current] to "
-        "matte polymer with soft satin finish, "
-        "non-metallic, non-glossy.'\n\n"
+        "Does the image look AI-generated? "
+        "Check: plastic surfaces, impossible "
+        "geometry, warped backgrounds, fake "
+        "fabric texture. Looks like a real "
+        "photograph = pass.\n\n"
+        "9. COMPOSITION REALITY CHECK\n"
+        "Is the composition physically possible "
+        "and realistic? Check specifically:\n"
+        "- HUMAN ANATOMY: If a model or body "
+        "parts are present, do they look "
+        "anatomically correct? Extra legs, "
+        "extra hands, missing limbs, distorted "
+        "proportions = fail.\n"
+        "- BAG PHYSICS: Is the bag sitting, "
+        "resting, or being held in a physically "
+        "plausible way? Floating bag, impossible "
+        "angle, defying gravity = fail.\n"
+        "- SCENE COHERENCE: Do all elements in "
+        "the scene make physical sense together? "
+        "Objects intersecting impossibly, "
+        "perspective that breaks reality, "
+        "scale inconsistencies between objects "
+        "= fail.\n"
+        "- PROPORTION CONSISTENCY: Are all "
+        "objects proportionally consistent "
+        "with each other? A bag larger than "
+        "a person, or a tennis ball larger "
+        "than the bag = fail.\n"
+        "A photograph that could exist in "
+        "reality = pass.\n\n"
+        "For each criterion respond PASS or FAIL "
+        "with one sentence reason.\n"
+        "Then give OVERALL: PASS or FIX\n"
+        "FIX if ANY criterion fails.\n"
+        "If FIX: write a FIX INSTRUCTION — one "
+        "specific sentence. Examples:\n"
+        "For extra zipper: 'Remove the extra "
+        "zipper on [location] — the product "
+        "reference only [N] zipper(s).'\n"
+        "For extra strap: 'Remove the extra "
+        "strap on [location] — not present in "
+        "product reference.'\n"
+        "For pattern: 'Restore the [pattern] "
+        "print to match product reference — "
+        "same motifs, colours, scale.'\n"
+        "For scale: 'Reduce bag size — should "
+        "fit in one hand, not larger than "
+        "model torso.'\n"
+        "Be specific about location and what "
+        "needs to change.\n\n"
         "Respond in EXACTLY this format:\n"
-        "1. PRODUCT ACCURACY: PASS/FAIL — [reason]\n"
-        "2. MATERIAL CORRECTNESS: PASS/FAIL — [reason]\n"
-        "3. EARRING SIZE: PASS/FAIL — [reason]\n"
-        "4. EARRING ORIENTATION: PASS/FAIL — [reason]\n"
+        "1. PATTERN ACCURACY: PASS/FAIL — [reason]\n"
+        "2. FABRIC QUALITY: PASS/FAIL — [reason]\n"
+        "3. BAG SHAPE: PASS/FAIL — [reason]\n"
+        "4. DETAIL FIDELITY: PASS/FAIL — [reason]\n"
         "5. MODEL CONSISTENCY: PASS/FAIL — [reason]\n"
         "6. LIGHTING REALISM: PASS/FAIL — [reason]\n"
         "7. COMPOSITION INTENT: PASS/FAIL — [reason]\n"
         "8. ANTI-AI CHECK: PASS/FAIL — [reason]\n"
+        "9. COMPOSITION REALITY CHECK: PASS/FAIL — [reason]\n"
         "OVERALL: PASS or FIX\n"
-        "FIX INSTRUCTION: [specific fix or 'none needed']"
+        "FIX INSTRUCTION: [specific fix or "
+        "'none needed']"
     )
 
     parts_list.append(types.Part(text=review_prompt))
@@ -265,21 +352,24 @@ def _fix_image(
         )
 
         parts_list.append(types.Part(text=(
-            "You are given a product reference image and a "
-            "photoshoot image that needs a specific fix.\n\n"
-            "MATERIAL CONTEXT: Orpina earrings are 3D printed "
-            "polymer with a matte to satin surface finish. "
-            "They are NOT metallic and NOT high-gloss plastic. "
-            "If the fix involves the earring surface, ensure "
-            "the result shows matte polymer texture.\n\n"
+            "You are given a product reference image "
+            "and a photoshoot image that needs a fix.\n\n"
+            "CRITICAL: The Lunchbags have distinctive "
+            "cotton print patterns. If the fix involves "
+            "the pattern, restore it to match "
+            "the product reference EXACTLY — same motifs, "
+            "same colours, same scale, same arrangement. "
+            "Do not invent a new pattern.\n\n"
+            "The bag surface must look like real woven "
+            "cotton — matte, soft texture, not glossy "
+            "or plastic-looking.\n\n"
             f"FIX REQUIRED: {fix_instruction}\n\n"
-            "Apply ONLY this fix. Keep everything else in "
-            "the image identical — composition, lighting, "
-            "background, model pose, skin tone, hair. "
-            "Only change what is specified in the fix.\n\n"
-            "The product earring from the reference must "
-            "remain exactly as shown — same shape, colour, "
-            "and form. Output the fixed image only."
+            "Apply ONLY this fix. Keep everything else "
+            "in the image identical — composition, "
+            "lighting, background, model pose, "
+            "skin tone, hair. Only change what is "
+            "specified in the fix.\n\n"
+            "Output the fixed image only."
         )))
 
         # Rate limit protection on fix calls
@@ -339,8 +429,8 @@ def _batch_consistency_check(
 
             parts_list = []
 
-            # Product reference first
-            for prod_bytes, prod_mime, _ in product_images:
+            # All product references first
+            for prod_bytes, prod_mime, prod_name in product_images:
                 parts_list.append(
                     types.Part(
                         inline_data=types.Blob(
@@ -350,7 +440,7 @@ def _batch_consistency_check(
                     )
                 )
 
-            # All images in this batch
+            # All photoshoot images in this batch
             for _, img_bytes in batch:
                 parts_list.append(
                     types.Part(
@@ -361,32 +451,39 @@ def _batch_consistency_check(
                     )
                 )
 
-            batch_names = [
-                f.name for f, _ in batch
-            ]
+            batch_names = [f.name for f, _ in batch]
+            prod_names  = [name for _, _, name in product_images]
 
             parts_list.append(types.Part(text=(
                 "You are reviewing a batch of photoshoot "
-                "images for Orpina jewelry brand as both "
+                "images for The Lunchbags lifestyle product brand as both "
                 "a Photo Editor and Technical Supervisor.\n\n"
-                f"IMAGE 1: Product reference — the exact "
-                f"earring that must appear in every shot.\n"
-                f"IMAGES 2 to {len(batch)+1}: Photoshoot "
+                f"IMAGES 1 to {len(prod_names)}: Product "
+                f"references — the exact bags that "
+                f"must appear in the shoot:\n"
+                + "\n".join(
+                    f"IMAGE {i+1}: {name}"
+                    for i, name in enumerate(prod_names)
+                ) +
+                f"\n\nIMAGES {len(prod_names)+1} to "
+                f"{len(prod_names)+len(batch)}: Photoshoot "
                 f"images that have already passed individual "
                 f"review. Look at them as a group.\n\n"
-                f"The images in this batch are:\n"
+                f"The photoshoot images in this batch are:\n"
                 + "\n".join(
-                    f"IMAGE {i+2}: {name}"
+                    f"IMAGE {len(prod_names)+i+1}: {name}"
                     for i, name in enumerate(batch_names)
                 ) +
                 f"\n\nTECHNICAL SPEC FOR THIS SHOOT:\n"
                 f"{technical_spec}\n\n"
                 "Check for these batch-level issues:\n\n"
-                "1. EARRING CONSISTENCY\n"
-                "Does the earring in every image match the "
-                "product reference in shape and colour? "
-                "Flag any image where the earring slipped "
-                "through individual review incorrectly.\n\n"
+                "1. PRODUCT CONSISTENCY\n"
+                "Each photoshoot image features ONE of the "
+                "product references. Does the bag in every "
+                "image match one of the references in "
+                "pattern, shape, and colour? Flag any "
+                "image where the bag does not match ANY "
+                "of the references.\n\n"
                 "2. MODEL CONSISTENCY\n"
                 "If a model appears across multiple images, "
                 "does she look like the same person? "
@@ -401,12 +498,11 @@ def _batch_consistency_check(
                 "flag if the overall brand aesthetic "
                 "has broken down completely — wrong "
                 "colour world, wrong model, or content "
-                "that could not belong to Orpina.\n\n"
+                "that could not belong to The Lunchbags.\n\n"
                 "4. MATERIAL CONSISTENCY\n"
-                "Do all earrings show the same surface "
-                "quality — matte to satin polymer, not "
-                "metallic or glossy? Any image showing "
-                "a different surface quality = flag.\n\n"
+                "Do all bags show the same surface "
+                "quality — real woven cotton texture, "
+                "matte finish, no leather or plastic?\n\n"
                 "5. TECHNICAL SPEC DRIFT\n"
                 "Compare the lighting in each image against "
                 "the Technical Spec provided above.\n"
@@ -431,7 +527,7 @@ def _batch_consistency_check(
                 "identifying which check failed and why.\n\n"
                 "Respond in EXACTLY this format:\n"
                 + "\n".join(
-                    f"IMAGE {i+2} ({name}): PASS or FLAG — reason"
+                    f"IMAGE {len(prod_names)+i+1} ({name}): PASS or FLAG — reason"
                     for i, name in enumerate(batch_names)
                 )
             )))
@@ -450,7 +546,7 @@ def _batch_consistency_check(
 
             # Parse results
             for i, (file_path, _) in enumerate(batch):
-                image_num  = batch_start + i + 2
+                image_num  = len(prod_names) + i + 1
                 image_name = file_path.name
                 search     = f"IMAGE {image_num} ({image_name}):"
                 for line in result_text.splitlines():
@@ -489,7 +585,7 @@ def _extract_fix_instruction(review_text: str) -> str:
 
 
 class PhotoEditorTool(BaseTool):
-    name: str = "Orpina Photo Editor"
+    name: str = "The Lunchbags Photo Editor"
     description: str = """
         Reviews all generated images as a Photo Editor would —
         checking product accuracy, model consistency, lighting
@@ -532,7 +628,7 @@ class PhotoEditorTool(BaseTool):
 
             # ── Load images to review ─────────────────────
             all_generated = sorted([
-                f for f in ASSET_DIR.iterdir()
+                f for f in _get_asset_dir().iterdir()
                 if f.is_file()
                 and f.suffix.lower() in SUPPORTED
                 and "TEST-" not in f.name
@@ -672,16 +768,31 @@ class PhotoEditorTool(BaseTool):
                         )
 
                 if fix_passed and best_bytes:
-                    target_file = gen_file
-                    final_name  = gen_file.name
-                    if is_art_rework:
-                        final_name = gen_file.name.replace("Art Review-", "")
-                        target_file = gen_file.parent / final_name
-                        # Write new and remove old
-                        target_file.write_bytes(best_bytes)
-                        gen_file.unlink()
+                    # Write fixed image
+                    gen_file.write_bytes(best_bytes)
+
+                    # If file had a prefix, rename
+                    # back to original clean name
+                    original_name = gen_file.name
+                    clean_name = original_name
+                    for prefix in [
+                        "Needs Review-",
+                        "Art Review-",
+                    ]:
+                        if clean_name.startswith(prefix):
+                            clean_name = clean_name[len(prefix):]
+                            break
+
+                    if clean_name != original_name:
+                        clean_path = gen_file.parent / clean_name
+                        gen_file.rename(clean_path)
+                        print(
+                            f"[PhotoEditor] Renamed back: "
+                            f"{original_name} → {clean_name}"
+                        )
+                        final_name = clean_name
                     else:
-                        gen_file.write_bytes(best_bytes)
+                        final_name = original_name
 
                     if anchor_image is None:
                         anchor_image = (best_bytes, "image/png")
@@ -725,12 +836,12 @@ class PhotoEditorTool(BaseTool):
 
             passed_files = [
                 (
-                    ASSET_DIR / r["file"],
-                    (ASSET_DIR / r["file"]).read_bytes(),
+                    _get_asset_dir() / r["file"],
+                    (_get_asset_dir() / r["file"]).read_bytes(),
                 )
                 for r in image_results
                 if r["status"] in ("PASS", "FIXED")
-                and (ASSET_DIR / r["file"]).exists()
+                and (_get_asset_dir() / r["file"]).exists()
             ]
 
             batch_flags = _batch_consistency_check(
@@ -745,12 +856,14 @@ class PhotoEditorTool(BaseTool):
                 new_name     = f"Needs Review-{flagged_path.name}"
                 new_path     = flagged_path.parent / new_name
                 flagged_path.rename(new_path)
+                # Update path reference for completeness
+                flagged_path = new_path
                 flagged     += 1
                 passed_first = max(0, passed_first - 1)
 
                 # Update result entry
                 for r in image_results:
-                    if r["file"] == flagged_path.name:
+                    if r["file"] == new_path.name.replace("Needs Review-", ""):
                         r["status"] = "FLAGGED_BATCH"
                         r["file"]   = new_name
                         r["review"] += (
@@ -773,6 +886,29 @@ class PhotoEditorTool(BaseTool):
                     f"no additional flags"
                 )
 
+            # ── Verify no stale prefixes ──────────────
+            stale = [
+                f.name for f in _get_asset_dir().iterdir()
+                if f.is_file()
+                and f.suffix.lower() in SUPPORTED
+                and any(
+                    f.name.startswith(p)
+                    for p in [
+                        "Needs Review-",
+                        "Art Director Review-",
+                        "Art Review-",
+                    ]
+                )
+            ]
+            if stale:
+                print(
+                    f"\n[PhotoEditor] ⚠ {len(stale)} files "
+                    f"still have review prefixes after "
+                    f"processing — check manually:"
+                )
+                for s in stale:
+                    print(f"  {s}")
+
             # ── Build report ──────────────────────────────
             now          = datetime.now().strftime("%Y-%m-%d %H:%M")
             pass_pct     = round(
@@ -784,7 +920,7 @@ class PhotoEditorTool(BaseTool):
             ) if total else 0
 
             report = (
-                f"# PHOTO EDITOR REPORT — ORPINA\n"
+                f"# PHOTO EDITOR REPORT — THE LUNCHBAGS\n"
                 f"Run: {now}\n"
                 f"Shoot concept: {shoot_concept}\n\n"
                 f"{'='*50}\n"

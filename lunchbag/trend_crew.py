@@ -4,7 +4,7 @@ from crewai_tools import ScrapeWebsiteTool
 import os
 
 @CrewBase
-class OrpinaTrendCrew:
+class LunchbagTrendCrew:
     """
     Standalone crew — runs the Trend Scout only.
     Run this once per month independently of the main crew.

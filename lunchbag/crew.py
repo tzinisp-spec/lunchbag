@@ -5,7 +5,7 @@ from crewai_tools import FileReadTool, FileWriterTool
 from lunchbag.tools.image_generator_tool import ImageGeneratorTool
 from lunchbag.tools.style_reference_tool import StyleReferenceReaderTool
 from lunchbag.tools.composition_reader_tool import CompositionReaderTool
-from lunchbag.tools.human_approval_tool import HumanApprovalTool
+from lunchbag.tools.concept_reader_tool import ConceptReaderTool
 
 import os
 
@@ -35,6 +35,7 @@ class LunchbagCrew:
             tools=[
                 self.file_read_tool,
                 StyleReferenceReaderTool(),
+                ConceptReaderTool(),
             ],
         )
 
@@ -49,7 +50,6 @@ class LunchbagCrew:
                 CompositionReaderTool(),
                 PhotoEditorTool(),
                 ArtDirectorTool(),
-                HumanApprovalTool(),
             ],
         )
 
@@ -121,12 +121,6 @@ class LunchbagCrew:
         )
 
     @task
-    def final_approval(self) -> Task:
-        return Task(
-            config=self.tasks_config["final_approval"],
-        )
-
-    @task
     def generate_sprint_report(self) -> Task:
         return Task(
             config=self.tasks_config["generate_sprint_report"],
@@ -148,3 +142,41 @@ class LunchbagCrew:
             memory=False,
             verbose=True,
         )
+
+    def run_with_report(self, inputs: dict) -> str:
+        """
+        Run the crew and always generate a
+        sprint report at the end, even if the
+        generate_sprint_report task fails.
+        """
+        import traceback
+        from lunchbag.tools.sprint_reporter_tool import (
+            SprintReporterTool
+        )
+
+        try:
+            result = self.crew().kickoff(inputs=inputs)
+        except Exception as e:
+            print(f"\n[Crew] Sprint ended with error: {e}")
+            result = str(e)
+        finally:
+            print(
+                "\n[Crew] Running Sprint Reporter "
+                "directly as fallback..."
+            )
+            try:
+                reporter = SprintReporterTool()
+                report   = reporter._run("{}")
+                print("[Crew] ✓ Sprint Report generated")
+                print(
+                    "Report saved to: "
+                    "outputs/sprint_report_latest.md"
+                )
+            except Exception as report_err:
+                print(
+                    f"[Crew] ✗ Sprint Report failed: "
+                    f"{report_err}"
+                )
+                traceback.print_exc()
+
+        return result

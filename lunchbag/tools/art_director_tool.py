@@ -6,7 +6,14 @@ from crewai.tools import BaseTool
 from google import genai
 from google.genai import types
 
-ASSET_DIR   = Path("asset_library/images")
+def _get_asset_dir() -> Path:
+    shoot_folder = os.getenv("SHOOT_FOLDER", "")
+    if shoot_folder:
+        return Path(
+            f"asset_library/images/{shoot_folder}"
+        )
+    return Path("asset_library/images")
+
 OUTPUTS_DIR = Path("outputs")
 REPORTS_DIR = Path("outputs/art_director_reports")
 SUPPORTED   = {".jpg", ".jpeg", ".png"}
@@ -95,7 +102,7 @@ def _review_batch(
     batch_names = [f.name for f in batch_files]
 
     review_prompt = (
-        "You are the Art Director for Orpina, a jewelry "
+        "You are the Art Director for The Lunchbags, a lifestyle product "
         "brand photoshoot. You have a sharp creative eye "
         "and high standards for visual storytelling.\n\n"
         f"You are reviewing batch {batch_index + 1} of "
@@ -231,7 +238,7 @@ def _review_batch(
 
 
 class ArtDirectorTool(BaseTool):
-    name: str = "Orpina Art Director"
+    name: str = "The Lunchbags Art Director"
     description: str = """
         Reviews all approved images from the Photo Editor
         as an Art Director — checking for composition drift,
@@ -282,7 +289,7 @@ class ArtDirectorTool(BaseTool):
             # Only review images that passed Photo Editor
             # Skip anything with Needs Review or Art Review prefix
             review_files = sorted([
-                f for f in ASSET_DIR.iterdir()
+                f for f in _get_asset_dir().iterdir()
                 if f.is_file()
                 and f.suffix.lower() in SUPPORTED
                 and "Needs Review-" not in f.name
@@ -371,7 +378,7 @@ class ArtDirectorTool(BaseTool):
             ) if total else 0
 
             report = (
-                f"# ART DIRECTION REPORT — ORPINA\n"
+                f"# ART DIRECTION REPORT — THE LUNCHBAGS\n"
                 f"Run: {now}\n\n"
                 f"{'='*50}\n"
                 f"## SUMMARY\n"

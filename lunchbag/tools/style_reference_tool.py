@@ -71,7 +71,7 @@ class StyleReferenceReaderTool(BaseTool):
 
             analysis_prompt = (
                 "You are a creative director analysing a set of "
-                "reference images for a jewelry brand photoshoot. "
+                "reference images for a lifestyle product brand photoshoot. "
                 "These images collectively define the complete "
                 "creative direction — mood, aesthetic, colour "
                 "palette, lighting, composition, and visual tone.\n\n"

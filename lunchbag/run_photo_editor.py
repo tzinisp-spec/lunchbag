@@ -16,7 +16,7 @@ if len(sys.argv) > 1:
     resume_arg = sys.argv[1]
 
 print("\n" + "="*50)
-print(f"  ORPINA — PHOTO EDITOR REVIEW {'(' + resume_arg + ')' if resume_arg else ''}")
+print(f"  THE LUNCHBAGS — PHOTO EDITOR REVIEW {'(' + resume_arg + ')' if resume_arg else ''}")
 print("="*50 + "\n")
 
 tool   = PhotoEditorTool()

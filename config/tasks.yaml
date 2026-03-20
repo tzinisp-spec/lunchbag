@@ -4,17 +4,17 @@
 research_trends:
   description: >
     Research current Instagram trends relevant to {brand_name},
-    a female earrings brand targeting {target_audience}.
+    a female bags brand targeting {target_audience}.
 
     You must cover all four of the following areas:
 
     1. CONTENT FORMATS: What types of posts are getting the
        most reach and saves on Instagram this week in the
-       jewelry and fashion space? (Carousels, single images,
+       lifestyle product and fashion space? (Carousels, single images,
        Reels, Stories, etc.)
 
     2. HASHTAGS: What are the top 5 trending hashtags in the
-       jewelry and fashion space right now? Include estimated
+       lifestyle product and fashion space right now? Include estimated
        post volume for each.
 
     3. COMPETITORS: Check these accounts: {competitor_accounts}.
@@ -90,10 +90,10 @@ build_creative_brief:
     for 6 weeks. Content mix: {content_mix}.
     Image format split: {image_formats}
 
-    Brand context (use to apply Orpina identity to the
+    Brand context (use to apply The Lunchbags identity to the
     reference aesthetic — do not let it override the refs):
     - Products: {product_focus}
-    - Materials: {earring_materials}
+    - Materials: {product_materials}
     - Never include: {shoot_dont_list}
     - Upcoming launches: {upcoming_launches}
     - Season: {current_season}
@@ -113,8 +113,8 @@ build_creative_brief:
        shots and why, based on {upcoming_launches}.
     5. WHAT THE IMAGES MUST MAKE {target_audience} FEEL —
        grounded in the mood of the style reference.
-    6. MATERIAL NOTE — how the polymer surface of the
-       earrings will interact with the lighting in the
+    6. MATERIAL NOTE — how the cotton surface of the
+       bags will interact with the lighting in the
        style reference.
     7. HARD CONSTRAINTS from {shoot_dont_list}.
 
@@ -138,23 +138,23 @@ build_creative_brief:
 
     OVERVIEW
     [2-3 sentences on the shoot's purpose and direction,
-    specific to {brand_name}'s 3D printed polymer earrings
+    specific to {brand_name}'s 3D printed cotton bags
     and Mediterranean identity]
 
     MATERIAL NOTE FOR VISUAL DIRECTOR
-    [How the 3d polymer surface should influence
+    [How the 3d cotton surface should influence
     lighting choices and composition in this shoot]
 
     SHOT REQUIREMENTS
     Total shots needed: [N] ([posts_per_week] x 6 weeks)
     Format split: [feed count] feed (1:1) + [story count] story (9:16)
-    - Promotional: [N] shots — products: [specific earring names]
+    - Promotional: [N] shots — products: [specific bag names]
     - Educational: [N] shots — topics: [specific angles e.g. process,
       material, how to style]
     - Entertaining: [N] shots — mood: [specific feeling or scenario]
 
     PRIORITY PRODUCTS THIS SPRINT
-    [Earring name] — [N] shots — reason: [tie to launch or campaign]
+    [Bag name] — [N] shots — reason: [tie to launch or campaign]
     (repeat per product)
 
     AESTHETIC DIRECTIONS TO EXPLORE
@@ -197,15 +197,15 @@ create_style_bible:
     This DNA will lock consistency across all generated images.
 
     STEP 3 — Design the shoot concept:
-    Material context: {earring_materials}
+    Material context: {product_materials}
     Brand palette: cobalt blue #2B4EFF, coral #E8634A,
     blush pink #D4748A, warm sand #F0E6D3, ivory #F7F4EF
     Never include: {shoot_dont_list}
 
     PART 1 — STYLE BIBLE
     Concept name, mood statement, backgrounds with HEX codes,
-    colour palette with HEX codes, earring presentation rules,
-    props rules (only if rhyming with earring shape/colour),
+    colour palette with HEX codes, bag presentation rules,
+    props rules (only if rhyming with bag shape/colour),
     negative space minimum, composition philosophy,
     DO NOT INCLUDE list.
 
@@ -231,7 +231,7 @@ create_style_bible:
     - Reference code
     - Content type: promotional/educational/entertaining
     - Format: feed (1:1) or story (9:16)
-    - Product: specific Orpina earring name
+    - Product: specific The Lunchbags bag name
     - Composition: detailed framing instruction — invent
       freely within the aesthetic vocabulary established by
       the composition references. Do not just copy references.
@@ -252,12 +252,12 @@ create_style_bible:
     COLOUR PALETTE
     [3-5 colours with HEX — from brand palette]
 
-    EARRING PRESENTATION
+    BAG PRESENTATION
     [How product sits in every frame]
 
     PROPS
     Allowed: YES/NO
-    If yes: [only if rhyming with earring shape/colour]
+    If yes: [only if rhyming with bag shape/colour]
 
     NEGATIVE SPACE
     Minimum: [%] of frame
@@ -328,7 +328,7 @@ create_style_bible:
     that Nano Banana can reproduce the same world in every
     generated image. Write it as a direct generation
     prompt — present tense, descriptive, specific.
-    Do not mention the earring here — that is handled
+    Do not mention the bag here — that is handled
     separately. This block will be injected verbatim
     into every image generation prompt in this sprint.]
 
@@ -340,7 +340,7 @@ create_style_bible:
     [SHOOT-SPR26-001]
     Type: [promotional/educational/entertaining]
     Format: [1:1 or 9:16]
-    Product: [specific Orpina earring name]
+    Product: [specific The Lunchbags bag name]
     Composition: [detailed framing instruction]
     Mood: [feeling]
     Notes: STANDARD or [deviation]
@@ -362,9 +362,9 @@ build_image_generation_package:
     Build every image generation prompt using this structure:
 
     PROMPT STRUCTURE (apply to every shot):
-    1. PRODUCT CONTEXT: Describe how the featured earring
-       interacts with the model or scene. Use: {earring_materials}.
-       Do NOT name the earring — the tool provides the 
+    1. PRODUCT CONTEXT: Describe how the featured bag
+       interacts with the model or scene. Use: {product_materials}.
+       Do NOT name the bag — the tool provides the 
        correct visual reference automatically.
     2. TECHNICAL SPEC: Apply the exact Technical Spec from
        Part 2 of the Style Bible document. This block is 
@@ -422,7 +422,7 @@ build_image_generation_package:
     [SHOOT-JUN-001]
     Format: feed (1:1)
     Content type: promotional
-    Product: [earring name]
+    Product: [bag name]
     Prompt: [The full production prompt based on the Style Bible
     and specific composition notes on the Shot List]
 

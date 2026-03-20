@@ -4,16 +4,16 @@ from crewai.tools import BaseTool
 from google import genai
 from google.genai import types
 
-# Using 'orpina' to match the rest of the project structure
+# Using 'the lunchbags' to match the rest of the project structure
 ASSET_DIR = Path("asset_library/images")
 
 class ImageGeneratorTool(BaseTool):
-    name: str = "Orpina Image Generator"
+    name: str = "The Lunchbags Image Generator"
     description: str = """
         Generates a product image using Google Imagen 3.
         Input must be pipe-separated: prompt|aspect_ratio|reference_code
         aspect_ratio: 1:1 for feed, 9:16 for story
-        Example: Cobalt blue earrings on warm sand...|1:1|SHOOT-SPR26-001
+        Example: Cobalt blue bags on warm sand...|1:1|SHOOT-SPR26-001
         Output: file path and ref code, or TOOL_ERROR: <reason>
     """
 

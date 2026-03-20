@@ -5,7 +5,7 @@ from lunchbag.tools.catalog_writer_tool import CatalogWriterTool
 load_dotenv()
 
 print("\n" + "="*50)
-print("  ORPINA — CATALOG WRITER")
+print("  THE LUNCHBAGS — CATALOG WRITER")
 print("="*50 + "\n")
 
 tool   = CatalogWriterTool()

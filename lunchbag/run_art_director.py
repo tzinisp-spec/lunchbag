@@ -10,7 +10,7 @@ from lunchbag.tools.art_director_tool import ArtDirectorTool
 load_dotenv()
 
 print("\n" + "="*50)
-print("  ORPINA — ART DIRECTOR REVIEW")
+print("  THE LUNCHBAGS — ART DIRECTOR REVIEW")
 print("="*50 + "\n")
 
 tool   = ArtDirectorTool()

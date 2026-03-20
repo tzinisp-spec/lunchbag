@@ -15,7 +15,7 @@ def get_file_mtime(filename):
 
 def generate():
     print("\n" + "="*50)
-    print("  ORPINA — SPRINT REPORTER")
+    print("  THE LUNCHBAGS — SPRINT REPORTER")
     print("="*50 + "\n")
 
     # Estimate timing data from file modification times
