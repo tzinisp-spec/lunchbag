@@ -240,6 +240,34 @@ create_style_bible:
     [PROPS]       10% — product and props only
     [INTERACTION]  5% — multiple people
 
+    OPTICAL PROPERTIES — include in composition
+    description when relevant to the shot type:
+
+    [DETAIL] shots — always specify:
+    "Shallow depth of field — subject sharp,
+    background softly out of focus."
+
+    [MOTION] shots — always specify:
+    "Directional motion blur consistent with
+    movement direction — [describe direction].
+    Subject slightly blurred, environment sharp
+    OR subject sharp, environment blurred."
+
+    [ATMOSPHERE] shots with backlight — add:
+    "Subtle lens flare from light source —
+    organic, not digital. Light bleeds slightly
+    into frame edges."
+
+    [HERO] shots — optionally add:
+    "Shallow depth of field on background, bag
+    tack sharp."
+
+    These optical properties are written into
+    the composition description and passed
+    directly to Nano Banana at generation time.
+    The FilmProcessor adds grain and tone curve
+    on top of whatever Nano Banana generates.
+
     For {images_per_sprint} = 10:
     Hero: 2, Model: 2, Motion: 2, Partial: 1,
     Atmosphere: 1, Detail: 1, Props: 1
@@ -475,6 +503,26 @@ build_image_generation_package:
     - create_style_bible
   output_file: outputs/image_generation_package.md
 
+run_film_processor:
+  description: >
+    Apply film-like post-processing to all
+    generated images. Call the FilmProcessorTool
+    with an empty string.
+
+    This must run AFTER image generation and
+    BEFORE the Photo Editor review so the
+    Photo Editor evaluates the final processed
+    images not the raw generated ones.
+
+    After the tool completes report:
+    - How many images were processed
+    - Any errors
+  expected_output: >
+    Film processing complete. All approved
+    images have tone curve, grain, and vignette
+    applied.
+  agent: photographer
+
 run_photo_editor:
   description: >
     Run the Photo Editor Tool to review all generated
@@ -585,6 +633,7 @@ generate_sprint_report:
       - creative_brief:              brief - sprint_start
       - create_style_bible:          bible - brief
       - build_image_generation:      package - bible
+      - run_film_processor:          0 (in-place modification)
       - run_photo_editor:            photo_ed - package
       - write_catalog:               catalog - photo_ed
       - run_art_director:            art_dir - catalog
@@ -604,6 +653,7 @@ generate_sprint_report:
           "build_creative_brief": [seconds],
           "create_style_bible": [seconds],
           "build_image_generation_package": [seconds],
+          "run_film_processor": [seconds],
           "run_photo_editor": [seconds],
           "write_catalog": [seconds],
           "run_art_director": [seconds]

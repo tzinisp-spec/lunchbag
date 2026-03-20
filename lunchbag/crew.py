@@ -6,6 +6,7 @@ from lunchbag.tools.image_generator_tool import ImageGeneratorTool
 from lunchbag.tools.style_reference_tool import StyleReferenceReaderTool
 from lunchbag.tools.composition_reader_tool import CompositionReaderTool
 from lunchbag.tools.concept_reader_tool import ConceptReaderTool
+from lunchbag.tools.film_processor_tool import FilmProcessorTool
 
 import os
 
@@ -63,6 +64,7 @@ class LunchbagCrew:
                 ImageGeneratorTool(),
                 SprintReporterTool(),
                 CatalogWriterTool(),
+                FilmProcessorTool(),
             ],
         )
 
@@ -98,6 +100,12 @@ class LunchbagCrew:
         return Task(
             config=self.tasks_config["build_image_generation_package"],
             output_file="outputs/image_generation_package.md",
+        )
+
+    @task
+    def run_film_processor(self) -> Task:
+        return Task(
+            config=self.tasks_config["run_film_processor"],
         )
 
     @task
