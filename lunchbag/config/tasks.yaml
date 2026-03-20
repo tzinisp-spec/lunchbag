@@ -224,13 +224,55 @@ create_style_bible:
     to write 40 different sentences, not the
     same sentence 40 times.
 
-    Tag each shot:
-    [CARRY] [OPEN] [PRODUCT] [DETAIL]
-    [CONTEXT] [INTERIOR]
+    DISTRIBUTION RULE — PERCENTAGE BASED:
+    Total shots = {images_per_sprint}
+    Distribute across categories using these
+    target percentages. Round to nearest whole
+    number. Any remainder goes to [MODEL] or
+    [PROPS] shots.
+
+    [HERO]        15% — the definitive shots
+    [MODEL]       20% — full model present
+    [MOTION]      15% — energy and movement
+    [PARTIAL]     10% — hands, legs, arms only
+    [ATMOSPHERE]  10% — wide, setting dominant
+    [DETAIL]      15% — extreme close-ups
+    [PROPS]       10% — product and props only
+    [INTERACTION]  5% — multiple people
+
+    For {images_per_sprint} = 10:
+    Hero: 2, Model: 2, Motion: 2, Partial: 1,
+    Atmosphere: 1, Detail: 1, Props: 1
+
+    For {images_per_sprint} = 40:
+    Hero: 6, Model: 8, Motion: 6, Partial: 4,
+    Atmosphere: 4, Detail: 6, Props: 4, Interaction: 2
+
+    For {images_per_sprint} = 60:
+    Hero: 9, Model: 12, Motion: 9, Partial: 6,
+    Atmosphere: 6, Detail: 9, Props: 6, Interaction: 3
+
+    Always calculate from {images_per_sprint}
+    at runtime. Never use fixed numbers.
+    Show the calculated distribution at the
+    top of the Shot List before listing shots:
+
+    "Shot distribution for {images_per_sprint} images:
+    Hero: N | Model: N | Motion: N | Partial: N |
+    Atmosphere: N | Detail: N | Props: N | Interaction: N"
+
+    No category should have 0 shots regardless
+    of total count — minimum 1 per category
+    always, distribute remainder to largest
+    categories first.
+
+    Tag each shot using these categories:
+    [HERO] [MODEL] [MOTION] [PARTIAL]
+    [ATMOSPHERE] [DETAIL] [PROPS] [INTERACTION]
 
     Use only tags that match what the refs show.
-    If refs show no model use only [PRODUCT]
-    [DETAIL] [CONTEXT].
+    If refs show no model use only [ATMOSPHERE]
+    [DETAIL] [PROPS].
   expected_output: >
     ═══════════════════════════════════════
     PART 1 — STYLE BIBLE
