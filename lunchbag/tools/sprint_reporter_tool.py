@@ -38,83 +38,83 @@ def _parse_photo_editor_report() -> dict:
         "flagged":      0,
         "batch_flagged": 0,
         "criteria_failures": {
-            "product_accuracy":   0,
-            "material_correctness": 0,
-            "bag_size":       0,
-            "bag_orientation": 0,
-            "model_consistency":  0,
-            "lighting_realism":   0,
-            "composition_intent": 0,
-            "anti_ai_check":      0,
+            "pattern_accuracy":    0,
+            "fabric_quality":      0,
+            "bag_size_scale":      0,
+            "hardware_fidelity":   0,
+            "model_consistency":   0,
+            "lighting_realism":    0,
+            "composition_intent":  0,
+            "anti_ai_check":       0,
             "composition_reality": 0,
         },
-        "fix_attempts": {
-            "1": 0,
-            "2": 0,
-            "3": 0,
-        },
+        "fix_attempts": {"1": 0, "2": 0, "3": 0},
         "image_details": [],
         "errors": [],
     }
 
-    current_image = None
+    # Try structured format first
+    structured = False
     for line in content.splitlines():
         line = line.strip()
+        img_match = re.search(r"([✓✗])\s+(PASS|FIXED|FLAGGED(?:_BATCH)?)", line)
+        if img_match:
+            structured = True
+            if "PASS" in line:
+                result["passed"] += 1
+                result["total"]  += 1
+            elif "FIXED" in line:
+                result["fixed"] += 1
+                result["total"] += 1
+                m = re.search(r"attempts:\s*(\d)", line)
+                if m and m.group(1) in result["fix_attempts"]:
+                    result["fix_attempts"][m.group(1)] += 1
+            elif "FLAGGED" in line:
+                result["flagged"] += 1
+                result["total"]   += 1
 
-        # Match review lines
-        pass_match = re.match(r"[✓✗]\s+PASS\s+\|\s+(.*)", line)
-        fixed_match = re.match(r"[✓✗]\s+FIXED\s+\|\s+(.*)", line)
-        flagged_match = re.match(r"[✗]\s+FLAGGED\s+\|\s+(.*)", line)
+            # Fall back to prose format parsing
 
-        if pass_match:
-            img_name = pass_match.group(1).split("|")[0].strip()
-            result["passed"] += 1
-            result["total"]  += 1
-            result["image_details"].append({"name": img_name, "status": "PASS", "reviewer": "Photo Editor"})
-        elif fixed_match:
-            parts = fixed_match.group(1).split("|")
-            img_name = parts[0].strip()
-            result["fixed"] += 1
-            result["total"] += 1
-            attempts_match = re.search(r"attempts:\s*(\d)", line)
-            n = attempts_match.group(1) if attempts_match else "1"
-            if n in result["fix_attempts"]:
-                result["fix_attempts"][n] += 1
-            result["image_details"].append({"name": img_name, "status": "FIXED", "reviewer": "Photo Editor", "attempts": n})
-        elif flagged_match:
-            img_name = flagged_match.group(1).split("|")[0].strip()
-            result["flagged"] += 1
-            result["total"]   += 1
-            result["image_details"].append({"name": img_name, "status": "FLAGGED", "reviewer": "Photo Editor"})
-        elif "FAILED BATCH CHECK" in line.upper():
-            result["batch_flagged"] += 1
+    if not structured:
+        # Total reviewed
+        m = re.search(
+            r"Total images reviewed[:\s]+(\d+)",
+            content, re.IGNORECASE
+        )
+        if m:
+            result["total"] = int(m.group(1))
 
-        # Track issue descriptions if we just started an image block
-        # Note: This parser is simplified; in a real scenario we'd track the last image seen
-        # For now, we'll look for lines following a FLAG that describe the issue.
+        # First pass
+        m = re.search(
+            r"First.pass approval rate[:\s]+\d+%\s*\((\d+)",
+            content, re.IGNORECASE
+        )
+        if m:
+            result["passed"] = int(m.group(1))
 
-        # Count criteria failures
-        criteria_map = {
-            "1. PRODUCT ACCURACY: FAIL":    "product_accuracy",
-            "2. MATERIAL CORRECTNESS: FAIL": "material_correctness",
-            "3. BAG SIZE: FAIL":         "bag_size",
-            "4. BAG ORIENTATION: FAIL":  "bag_orientation",
-            "5. MODEL CONSISTENCY: FAIL":    "model_consistency",
-            "6. LIGHTING REALISM: FAIL":     "lighting_realism",
-            "7. COMPOSITION INTENT: FAIL":   "composition_intent",
-            "8. ANTI-AI CHECK: FAIL":        "anti_ai_check",
-            "9. COMPOSITION REALITY CHECK: FAIL": "composition_reality",
-        }
-        for key, field in criteria_map.items():
-            if key in line.upper():
-                result["criteria_failures"][field] += 1
-                if result["image_details"]:
-                    last = result["image_details"][-1]
-                    if last["status"] != "PASS":
-                        last.setdefault("issues", []).append(key.split(":")[0].strip())
+        # Fixed
+        m = re.search(
+            r"(?:successfully\s+)?fixed[:\s]+(\d+)",
+            content, re.IGNORECASE
+        )
+        if m:
+            result["fixed"] = int(m.group(1))
 
-        if "TOOL_ERROR" in line:
-            result["errors"].append(line)
+        # Flagged
+        m = re.search(
+            r"flagged for manual review[:\s]+(\d+)",
+            content, re.IGNORECASE
+        )
+        if m:
+            result["flagged"] = int(m.group(1))
+
+        # Batch flagged
+        m = re.search(
+            r"batch consistency[^.]*?(\d+)",
+            content, re.IGNORECASE
+        )
+        if m:
+            result["batch_flagged"] = int(m.group(1))
 
     return result
 
@@ -139,46 +139,80 @@ def _parse_art_director_report() -> dict:
         "errors": [],
     }
 
+    # Try structured format first
+    structured = False
     for line in content.splitlines():
         line = line.strip()
+        if re.search(r"([✓✗])\s+(PASS|FLAGGED)\s+\|", line):
+            structured = True
+            if "PASS" in line:
+                result["passed"] += 1
+                result["total"]  += 1
+            elif "FLAGGED" in line:
+                result["flagged"] += 1
+                result["total"]   += 1
 
-        pass_match = re.search(r"[✓]\s+PASS\s+\|\s+(.*)", line)
-        flag_match = re.search(r"[✗]\s+FLAGGED\s+\|\s+(.*)", line)
 
-        if pass_match:
-            img_name = pass_match.group(1).strip()
-            result["passed"] += 1
-            result["total"]  += 1
-            result["image_details"].append({"name": img_name, "status": "PASS", "reviewer": "Art Director"})
-        elif flag_match:
-            img_name = flag_match.group(1).strip()
-            result["flagged"] += 1
-            result["total"]  += 1
-            result["image_details"].append({"name": img_name, "status": "FLAGGED", "reviewer": "Art Director"})
-
-        if re.search(r"COMPOSITION DRIFT.*FLAG", line, re.IGNORECASE):
+        if re.search(
+            r"COMPOSITION DRIFT.*FLAG", line, re.IGNORECASE
+        ):
             result["drift_types"]["composition_drift"] += 1
-            if result["image_details"]: result["image_details"][-1].setdefault("issues", []).append("Composition Drift")
-
-        if re.search(r"LIGHTING DRIFT.*FLAG", line, re.IGNORECASE):
+        if re.search(
+            r"LIGHTING DRIFT.*FLAG", line, re.IGNORECASE
+        ):
             result["drift_types"]["lighting_drift"] += 1
-            if result["image_details"]: result["image_details"][-1].setdefault("issues", []).append("Lighting Drift")
-
-        if re.search(r"MOOD DRIFT.*FLAG", line, re.IGNORECASE):
+        if re.search(
+            r"MOOD DRIFT.*FLAG", line, re.IGNORECASE
+        ):
             result["drift_types"]["mood_drift"] += 1
-            if result["image_details"]: result["image_details"][-1].setdefault("issues", []).append("Mood Drift")
 
-        if re.search(r"REGENERATION NOTE:\s*(.*)", line, re.IGNORECASE):
-            note = re.search(r"REGENERATION NOTE:\s*(.*)", line, re.IGNORECASE).group(1)
-            if result["image_details"]: result["image_details"][-1]["fix_instruction"] = note
+    # Fall back to prose format
+    if not structured:
+        m = re.search(
+            r"Total images reviewed[:\s]+(\d+)",
+            content, re.IGNORECASE
+        )
+        if m:
+            result["total"] = int(m.group(1))
 
-        if re.search(r"^-?\s*Batch\s+\d+:", line, re.IGNORECASE):
-            result["batch_observations"].append(
-                line.strip().lstrip("- ")
+        m = re.search(
+            r"Passed[^:]*[:\s]+(\d+)",
+            content, re.IGNORECASE
+        )
+        if m:
+            result["passed"] = int(m.group(1))
+
+        m = re.search(
+            r"Flagged for rework[:\s]+(\d+)",
+            content, re.IGNORECASE
+        )
+        if m:
+            result["flagged"] = int(m.group(1))
+
+        # Detect drift types from prose
+        if re.search(
+            r"too compositionally similar|"
+            r"composition.*repetitive|"
+            r"same angle|same framing",
+            content, re.IGNORECASE
+        ):
+            result["drift_types"]["composition_drift"] += (
+                result["flagged"]
             )
 
-        if "TOOL_ERROR" in line:
-            result["errors"].append(line)
+        if re.search(
+            r"lighting.*inconsistent|"
+            r"different.*light|color temperature",
+            content, re.IGNORECASE
+        ):
+            result["drift_types"]["lighting_drift"] += 1
+
+        if re.search(
+            r"mood.*different|tone.*off|"
+            r"feel.*wrong|energy.*inconsistent",
+            content, re.IGNORECASE
+        ):
+            result["drift_types"]["mood_drift"] += 1
 
     return result
 
@@ -209,12 +243,41 @@ def _parse_image_level_details() -> list[dict]:
     # Each block starts with ✓ or ✗ and filename
     current_image = None
 
+    # Prose list detection
+    in_pe_flagged_list = False
+
     for line in pe_content.splitlines():
-        # Detect new image entry
+        line_s = line.strip()
+        
+        # Detect prose heading for flagged images
+        if "IMAGES FLAGGED FOR MANUAL REVIEW:" in line_s.upper():
+            in_pe_flagged_list = True
+            continue
+        
+        if in_pe_flagged_list and line_s.startswith("- `"):
+            # Match - `filename.png` (Issue: ...)
+            m = re.search(r"- `(.+?)`\s*(?:\((.+?)\))?", line_s)
+            if m:
+                filename = m.group(1)
+                issue = m.group(2) or "Failed review"
+                results.append({
+                    "filename":       filename,
+                    "pe_status":      "FLAGGED",
+                    "pe_failures":    [issue],
+                    "pe_fix":         "",
+                    "pe_fix_attempts": 0,
+                    "ad_status":      "NOT_REVIEWED",
+                    "ad_issues":      [],
+                    "ad_regen_note":  "",
+                    "final_status":   "NEEDS_MANUAL_REVIEW",
+                })
+            continue
+
+        # Detect new image entry (structured)
         img_match = re.search(
             r"([✓✗])\s+(PASS|FIXED|FLAGGED(?:_BATCH)?)"
             r"\s+\|\s+(.+?)(?:\s+\||$)",
-            line.strip(),
+            line_s,
         )
         if img_match:
             # Save previous block
@@ -291,11 +354,48 @@ def _parse_image_level_details() -> list[dict]:
     # Parse Art Director per-image blocks
     if ad_content:
         ad_current = None
+        in_ad_flagged_list = False
+
         for line in ad_content.splitlines():
+            line_s = line.strip()
+
+            # Prose list detection for AD
+            if "IMAGES FLAGGED FOR REWORK:" in line_s.upper():
+                in_ad_flagged_list = True
+                continue
+
+            if in_ad_flagged_list and line_s.startswith("- `") or (re.match(r"^\d+\.\s+\*\*`", line_s)):
+                # Match 1. **`filename.png`** or - `filename.png`
+                m = re.search(r"`(.+?)`", line_s)
+                if m:
+                    filename = m.group(1)
+                    # Find or create result
+                    found = False
+                    for r in results:
+                        if r["filename"] == filename or filename in r["filename"]:
+                            r["ad_status"] = "FLAGGED"
+                            r["final_status"] = "ART_REVIEW_FLAGGED"
+                            found = True
+                            break
+                    if not found:
+                        results.append({
+                            "filename":       filename,
+                            "pe_status":      "PASS",
+                            "pe_failures":    [],
+                            "pe_fix":         "",
+                            "pe_fix_attempts": 0,
+                            "ad_status":      "FLAGGED",
+                            "ad_issues":      ["Art review flagged"],
+                            "ad_regen_note":  "",
+                            "final_status":   "ART_REVIEW_FLAGGED",
+                        })
+                continue
+
             ad_match = re.search(
-                r"([✓✗])\s+(PASS|FLAGGED)\s+\|\s+(.+?)(?:\s+\||$)",
-                line.strip(),
+                r"([✓✗])\s+(PASS|FLAGGED)\s+\|\s+(.+?)$",
+                line_s,
             )
+
             if ad_match:
                 ad_current = ad_match.group(3).strip()
                 status     = ad_match.group(2)
@@ -415,6 +515,22 @@ def _count_asset_library() -> dict:
         and "TEST-" not in f.name
     ]
 
+    approved_files = [
+        f for f in files
+        if "Needs Review-" not in f.name
+        and "Art Review-"   not in f.name
+    ]
+
+    sprint_id = "UNKNOWN"
+    if approved_files:
+        # Match lunchbag-SPRING-26-03-20
+        match = re.search(
+            r"([a-zA-Z]+-[A-Z]+-\d+-\d+-\d+)",
+            approved_files[0].name,
+        )
+        if match:
+            sprint_id = match.group(1)
+
     # Live counts from file system
     live_needs_review = sum(
         1 for f in files
@@ -470,6 +586,7 @@ def _count_asset_library() -> dict:
         "approved":     approved,
         "needs_review": final_needs_review,
         "art_review":   final_art_review,
+        "sprint_id":    sprint_id,
     }
 
 
@@ -524,35 +641,94 @@ class SprintReporterTool(BaseTool):
                     "errors":         [],
                 }
 
-            sprint_id      = timing.get("sprint_id", "UNKNOWN")
-            started_at_str = timing.get("started_at", datetime.now().isoformat())
-            steps = {
-                k: max(0, int(v))
-                for k, v in timing.get(
-                    "steps", {}
-                ).items()
+            sprint_id_input = timing.get("sprint_id", "UNKNOWN")
+            started_at_str  = timing.get("started_at", datetime.now().isoformat())
+            input_errors    = timing.get("errors", [])
+
+            # ── Parse image data first ──────────────────
+            pe_data    = _parse_photo_editor_report()
+            ad_data    = _parse_art_director_report()
+            assets     = _count_asset_library()
+            images_gen = assets["total"]
+            
+            sprint_id = sprint_id_input
+            if sprint_id == "UNKNOWN":
+                sprint_id = assets.get("sprint_id", "UNKNOWN")
+
+            # Fix images_planned
+            images_planned = int(timing.get("images_planned", 0))
+            if images_planned == 0:
+                # Try to read from outputs
+                pkg_path = OUTPUTS_DIR / "image_generation_package.md"
+                if pkg_path.exists():
+                    content = pkg_path.read_text()
+                    match = re.search(
+                        r"(\d+)\s+images?\s+(?:total|planned|to generate)",
+                        content,
+                        re.IGNORECASE,
+                    )
+                    if match:
+                        images_planned = int(match.group(1))
+                # Final fallback — count files in asset dir
+                if images_planned == 0:
+                    images_planned = assets["total"]
+
+            # Calculate timings from file mtimes
+            def get_mtime(filename: str) -> float:
+                p = OUTPUTS_DIR / filename
+                return p.stat().st_mtime if p.exists() else 0
+
+            brief_mtime   = get_mtime("creative_brief.md")
+            bible_mtime   = get_mtime("style_bible_and_shot_list.md")
+            package_mtime = get_mtime("image_generation_package.md")
+            pe_mtime      = get_mtime("photo_editor_latest.md")
+            ad_mtime      = get_mtime("art_director_latest.md")
+
+            def safe_diff(a: float, b: float) -> int:
+                diff = int(a - b)
+                return max(0, diff)
+
+            # Use sprint start from timing input
+            # or earliest file mtime as fallback
+            earliest = min(
+                t for t in [
+                    brief_mtime, bible_mtime,
+                    package_mtime
+                ] if t > 0
+            ) if any([
+                brief_mtime, bible_mtime, package_mtime
+            ]) else 0
+
+            step_timings = {
+                "build_creative_brief":
+                    safe_diff(bible_mtime, earliest),
+                "create_style_bible":
+                    safe_diff(package_mtime, bible_mtime),
+                "build_image_generation_package":
+                    safe_diff(pe_mtime, package_mtime),
+                "run_photo_editor":
+                    safe_diff(ad_mtime, pe_mtime),
+                "write_catalog":              0,
+                "run_art_director":           0,
+                "final_approval":             0,
             }
-            images_planned = timing.get("images_planned", 0)
-            input_errors   = timing.get("errors", [])
 
             try:
                 started_at = datetime.fromisoformat(started_at_str)
             except Exception:
-                started_at = datetime.now()
+                started_at = datetime.fromtimestamp(earliest) if earliest > 0 else datetime.now()
 
             now           = datetime.now()
-            total_seconds = int((now - started_at).total_seconds())
+            # If ad_mtime is earlier than start (older run), use now as end
+            end_time      = ad_mtime if ad_mtime > earliest else now.timestamp()
+            total_seconds = safe_diff(end_time, earliest) if earliest > 0 else int((now - started_at).total_seconds())
             total_runtime = (
                 f"{total_seconds // 3600}h "
                 f"{(total_seconds % 3600) // 60}m "
                 f"{total_seconds % 60}s"
             )
 
-            pe_data    = _parse_photo_editor_report()
-            ad_data    = _parse_art_director_report()
-            assets     = _count_asset_library()
-            images_gen = assets["total"]
-            costs      = _estimate_costs(pe_data, ad_data, images_gen)
+            costs = _estimate_costs(pe_data, ad_data, images_gen)
 
             all_errors = input_errors + pe_data.get("errors", []) + ad_data.get("errors", [])
 
@@ -619,6 +795,12 @@ class SprintReporterTool(BaseTool):
                 f"| Images planned | {images_planned} |\n"
                 f"| Images generated | {images_gen} |\n"
                 f"| Images approved | {assets['approved']} |\n"
+                f"| First-pass approval rate | "
+                f"{pe_data.get('passed', 0)}/"
+                f"{pe_data.get('total', 1) or 1} "
+                f"({round(pe_data.get('passed', 0) / max(pe_data.get('total', 1), 1) * 100)}%) |\n"
+                f"| Film processed | "
+                f"{assets.get('approved', 0)} |\n"
                 f"| Needs manual review | "
                 f"{assets['needs_review']} |\n"
                 f"| Fixed by Art Director loop | "
@@ -632,7 +814,7 @@ class SprintReporterTool(BaseTool):
             )
 
             for key, label in step_labels.items():
-                secs = steps.get(key, 0)
+                secs = step_timings.get(key, 0)
                 report += f"| {label} | {fmt_seconds(secs)} |\n"
 
             report += (

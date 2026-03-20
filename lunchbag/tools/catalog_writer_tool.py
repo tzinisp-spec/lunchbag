@@ -93,7 +93,7 @@ class CatalogWriterTool(BaseTool):
                 if "Needs Review-" in f.name or "Art Review-" in f.name:
                     continue
                 
-                # Extract ID (e.g. lunchbag-SPR-26-03-20-S1-001)
+                # Extract ID (e.g. lunchbag-SPRING-26-03-20-S1-001)
                 img_id = f.stem
                 if img_id in seen_ids:
                     continue
@@ -101,9 +101,10 @@ class CatalogWriterTool(BaseTool):
                 status = statuses.get(f.name, "unknown")
                 
                 # Sprint ID extraction from new format
-                sprint_id = "unknown"
+                sprint_id = "UNKNOWN"
+                # Match lunchbag-SPRING-26-03-20
                 match = re.search(
-                    r"([a-z]+-[A-Z]+-\d+-\d+-\d+)",
+                    r"([a-zA-Z]+-[A-Z]+-\d+-\d+-\d+)",
                     f.name,
                 )
                 if match:
