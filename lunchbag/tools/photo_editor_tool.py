@@ -459,7 +459,7 @@ def _fix_image(
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE", "TEXT"],
                 temperature=0.2,
-                image_generation_config=types.ImageGenerationConfig(
+                image_config=types.ImageConfig(
                     aspect_ratio="3:4",
                 ),
             ),

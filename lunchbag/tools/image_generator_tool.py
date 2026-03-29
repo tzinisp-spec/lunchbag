@@ -1014,7 +1014,7 @@ class ImageGeneratorTool(BaseTool):
                     config=types.GenerateContentConfig(
                         response_modalities=["IMAGE", "TEXT"],
                         temperature=0.7,
-                        image_generation_config=types.ImageGenerationConfig(
+                        image_config=types.ImageConfig(
                             aspect_ratio=aspect_ratio,
                         ),
                     ),
