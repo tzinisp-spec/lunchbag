@@ -472,6 +472,9 @@ def _fix_image(
                     return base64.b64decode(data)
                 return data
 
+    except (AttributeError, TypeError, ImportError,
+            ModuleNotFoundError, NotImplementedError):
+        raise  # Let monitor catch these as fatal — no point retrying
     except Exception as e:
         print(f"[PhotoEditor] Fix error: {e}")
 
@@ -1122,5 +1125,8 @@ class PhotoEditorTool(BaseTool):
 
             return report
 
+        except (AttributeError, TypeError, ImportError,
+                ModuleNotFoundError, NotImplementedError) as e:
+            return f"FATAL_ERROR: {type(e).__name__}: {e}"
         except Exception as e:
             return f"TOOL_ERROR: {str(e)}"

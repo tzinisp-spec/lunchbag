@@ -42,8 +42,22 @@ INPUTS = {
 
 # ── Monitor ──────────────────────────────────────────────
 
+FATAL_EXCEPTION_TYPES = (
+    AttributeError,
+    TypeError,
+    ImportError,
+    ModuleNotFoundError,
+    SyntaxError,
+    NotImplementedError,
+)
+
+
 def _is_quota_exhausted(result: str) -> bool:
     return "DAILY_QUOTA_EXHAUSTED" in result
+
+
+def _is_fatal_error(result: str) -> bool:
+    return "FATAL_ERROR:" in result
 
 
 def _run_step_with_retry(
@@ -54,8 +68,11 @@ def _run_step_with_retry(
 ) -> tuple[bool, str]:
     """
     Run a pipeline step with automatic retry.
-    - Retries up to max_attempts on failure.
+    - Retries up to max_attempts on transient failures.
     - Hard-stops immediately on daily quota exhaustion.
+    - Hard-stops immediately on fatal errors (code bugs,
+      missing attributes, bad imports) that will never
+      resolve on retry.
     - Returns (success, last_result).
     """
     last_result = ""
@@ -66,6 +83,8 @@ def _run_step_with_retry(
         )
         try:
             last_result = step_fn()
+        except FATAL_EXCEPTION_TYPES as e:
+            last_result = f"FATAL_ERROR: {type(e).__name__}: {e}"
         except Exception as e:
             last_result = f"EXCEPTION: {e}"
 
@@ -76,6 +95,14 @@ def _run_step_with_retry(
                 f"\n[Monitor] ✗ DAILY API QUOTA EXHAUSTED\n"
                 f"  Pipeline stopped. "
                 f"Resume tomorrow.\n"
+            )
+            sys.exit(1)
+
+        if _is_fatal_error(last_result):
+            print(
+                f"\n[Monitor] ✗ FATAL ERROR — retrying will not help.\n"
+                f"  Fix the underlying issue and re-run.\n"
+                f"  {last_result}\n"
             )
             sys.exit(1)
 

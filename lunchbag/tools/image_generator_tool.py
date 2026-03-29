@@ -1019,6 +1019,12 @@ class ImageGeneratorTool(BaseTool):
                         ),
                     ),
                 )
+            except (AttributeError, TypeError, ImportError,
+                    ModuleNotFoundError, NotImplementedError) as api_err:
+                # Programming error — retrying will never help
+                return (
+                    f"FATAL_ERROR: {type(api_err).__name__}: {api_err}"
+                )
             except Exception as api_err:
                 err_str = str(api_err)
                 print(f"[ImageGenerator] API Call Failed: {api_err}")
