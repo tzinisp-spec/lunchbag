@@ -344,12 +344,11 @@ def _extract_set_dnas() -> list[str]:
     content = style_bible_path.read_text()
 
     # Find all SET DNA PROMPT BLOCKs in order.
-    # Handles two formats:
-    #   Inline:    **SET DNA PROMPT BLOCK:** text here
-    #   Next-line: **SET DNA PROMPT BLOCK:**\ntext here
+    # Handles both bold (**SET DNA PROMPT BLOCK:**)
+    # and plain (SET DNA PROMPT BLOCK:) formatting.
     blocks = re.findall(
-        r"\*\*SET DNA PROMPT BLOCK:\*\*\s*(.*?)"
-        r"(?=\n\s*[═=]{3,}|\n\s*\*\*SET \d|\n\s*SET \d|\Z)",
+        r"\*{0,2}SET DNA PROMPT BLOCK:\*{0,2}\s*(.*?)"
+        r"(?=\n\s*[═=]{3,}|\n\s*\*{0,2}SET \d|\n\s*\[SHOOT-|\Z)",
         content,
         re.DOTALL | re.IGNORECASE,
     )
