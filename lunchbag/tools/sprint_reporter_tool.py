@@ -7,15 +7,39 @@ from crewai.tools import BaseTool
 
 def _get_asset_dir() -> Path:
     shoot_folder = os.getenv("SHOOT_FOLDER", "")
+    base_dir     = Path("asset_library/images")
     if shoot_folder:
-        return Path(
-            f"asset_library/images/{shoot_folder}"
-        )
-    return Path("asset_library/images")
+        path = base_dir / shoot_folder
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    # Fallback to most recent shoot folder
+    folders = []
+    for month_dir in base_dir.iterdir():
+        if not month_dir.is_dir():
+            continue
+        for shoot_dir in month_dir.iterdir():
+            if (shoot_dir.is_dir()
+                    and shoot_dir.name.startswith(
+                        "Shoot"
+                    )):
+                folders.append(shoot_dir)
+    if folders:
+        return sorted(folders)[-1]
+    return base_dir
 
-OUTPUTS_DIR  = Path("outputs")
-CATALOG_PATH = Path("asset_library/catalog.json")
-REPORTS_DIR  = Path("outputs/sprint_reports")
+OUTPUTS_DIR = Path("outputs")
+REPORTS_DIR = Path("outputs/sprint_reports")
+
+
+def _get_catalog_path() -> Path:
+    shoot_folder = os.getenv("SHOOT_FOLDER", "")
+    if shoot_folder:
+        return (
+            Path("asset_library/images")
+            / shoot_folder
+            / "catalog.json"
+        )
+    return Path("asset_library/catalog.json")
 SUPPORTED    = {".jpg", ".jpeg", ".png"}
 
 # Approximate cost per API call (USD)
@@ -493,10 +517,11 @@ def _parse_image_level_details() -> list[dict]:
 
 
 def _parse_catalog() -> dict:
-    if not CATALOG_PATH.exists():
+    catalog_path = _get_catalog_path()
+    if not catalog_path.exists():
         return {}
     try:
-        data = json.loads(CATALOG_PATH.read_text())
+        data = json.loads(catalog_path.read_text())
         return data.get("meta", {})
     except Exception:
         return {}

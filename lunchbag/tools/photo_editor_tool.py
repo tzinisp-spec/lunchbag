@@ -10,11 +10,28 @@ from google.genai import types
 
 def _get_asset_dir() -> Path:
     shoot_folder = os.getenv("SHOOT_FOLDER", "")
+    current_set  = int(os.getenv("CURRENT_SET", "0"))
+    base_dir     = Path("asset_library/images")
     if shoot_folder:
-        return Path(
-            f"asset_library/images/{shoot_folder}"
-        )
-    return Path("asset_library/images")
+        path = base_dir / shoot_folder
+        if current_set > 0:
+            path = path / f"Set{current_set}"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    # Fallback to most recent shoot folder
+    folders = []
+    for month_dir in base_dir.iterdir():
+        if not month_dir.is_dir():
+            continue
+        for shoot_dir in month_dir.iterdir():
+            if (shoot_dir.is_dir()
+                    and shoot_dir.name.startswith(
+                        "Shoot"
+                    )):
+                folders.append(shoot_dir)
+    if folders:
+        return sorted(folders)[-1]
+    return base_dir
 
 PRODUCTS_DIR = Path("products")
 OUTPUTS_DIR  = Path("outputs")
@@ -47,13 +64,23 @@ def _get_shoot_concept() -> str:
     if not path.exists():
         return ""
     content = path.read_text()
+    # Try concept name from header line first
+    # e.g. "Concept: The Athletic Ritual | Brand: ..."
     match = re.search(
-        r"MOOD IN ONE SENTENCE\s*\n(.*?)(?=\n\s*[═=]{3,}|\n\s*##|\Z)",
+        r"^Concept:\s*(.+?)(?:\s*\||\s*$)",
         content,
-        re.DOTALL | re.IGNORECASE,
+        re.MULTILINE | re.IGNORECASE,
     )
     if match:
         return match.group(1).strip()
+    # Fallback: MOOD paragraph
+    match = re.search(
+        r"\*\*MOOD\*\*\s*\n(.*?)(?=\n\s*\*\*|\n[═=]{3,}|\Z)",
+        content,
+        re.DOTALL,
+    )
+    if match:
+        return match.group(1).strip()[:200]
     return ""
 
 
@@ -181,23 +208,41 @@ def _review_image(
         "Lighting variation on same pattern = pass.\n\n"
         "2. FABRIC QUALITY\n"
         "Does the bag surface look like real "
-        "woven cotton? It should have visible "
-        "fabric texture, natural matte finish, "
-        "soft drape. Leather-looking, plastic, "
-        "or glossy surface = fail.\n\n"
+        "woven cotton? It MUST have visible "
+        "fabric weave texture, natural matte "
+        "finish, and soft drape. This is a "
+        "hard fail — no partial credit:\n"
+        "- Surface looks plastic, vinyl, or "
+        "synthetic = FAIL\n"
+        "- Surface looks like leather = FAIL\n"
+        "- Surface is glossy or shiny = FAIL\n"
+        "- No visible fabric texture (smooth "
+        "like rubber) = FAIL\n"
+        "Cotton weave must be visible, especially "
+        "in close-up shots. If you cannot "
+        "clearly see fabric texture = FAIL.\n\n"
         "3. BAG SIZE AND SCALE\n"
-        "Is the bag a realistic size relative "
-        "to the model's hand, arm, or body? "
         "The bag is H21cm x W16cm x D24cm — "
-        "approximately the size of a small "
-        "handbag. It should fit comfortably "
-        "in one hand. It must never appear "
-        "larger than the model's torso or "
-        "wider than her shoulders. "
-        "Oversized, giant-looking bag = fail. "
-        "The bag shape should be rectangular "
-        "with natural cotton softness — not "
-        "collapsed, not rigidly geometric.\n\n"
+        "a compact lunch bag roughly the size "
+        "of a large hardcover book. "
+        "This is a hard fail — no partial credit:\n"
+        "- Bag appears larger than the model's "
+        "torso = FAIL\n"
+        "- Bag appears wider than the model's "
+        "shoulders = FAIL\n"
+        "- Bag looks like a large tote, backpack, "
+        "or shopping bag = FAIL\n"
+        "- When held in one hand, the bag bottom "
+        "should be near or above the hip — if it "
+        "reaches the knee, it is too big = FAIL\n"
+        "For no-model shots: the bag should appear "
+        "smaller than an A4 sheet of paper in "
+        "height (21cm). If it looks larger than "
+        "a laptop bag or an everyday backpack, "
+        "it is too big = FAIL.\n"
+        "The shape should be rectangular with "
+        "natural cotton softness — not collapsed, "
+        "not rigidly geometric.\n\n"
         "4. HARDWARE AND DETAIL FIDELITY\n"
         "Compare every visible hardware detail "
         "on the bag against the product reference. "
@@ -242,61 +287,83 @@ def _review_image(
         "geometry, warped backgrounds, fake "
         "fabric texture. Looks like a real "
         "photograph = pass.\n\n"
-        "9. COMPOSITION REALITY CHECK\n"
-        "Is the composition physically possible "
-        "and realistic? Check specifically:\n"
-        "- HUMAN ANATOMY: If a model or body "
-        "parts are present, do they look "
-        "anatomically correct? Extra legs, "
-        "extra hands, missing limbs, distorted "
-        "proportions = fail.\n"
-        "- BAG PHYSICS: Is the bag sitting, "
-        "resting, or being held in a physically "
-        "plausible way? Floating bag, impossible "
-        "angle, defying gravity = fail.\n"
-        "- SCENE COHERENCE: Do all elements in "
-        "the scene make physical sense together? "
-        "Objects intersecting impossibly, "
-        "perspective that breaks reality, "
-        "scale inconsistencies between objects "
-        "= fail.\n"
-        "- PROPORTION CONSISTENCY: Are all "
-        "objects proportionally consistent "
-        "with each other? A bag larger than "
-        "a person, or a tennis ball larger "
-        "than the bag = fail.\n"
-        "A photograph that could exist in "
-        "reality = pass.\n\n"
+        "9. COMPOSITION REALITY CHECK — "
+        "STRICT HUMAN ANATOMY AUDIT\n"
+        "This is a zero-tolerance check. "
+        "Any anatomical impossibility = "
+        "immediate FAIL. No exceptions.\n\n"
+        "BEFORE SCORING: physically count and "
+        "write the numbers in your response. "
+        "State: 'I count: X people, X hands "
+        "total, X fingers on each visible hand, "
+        "X legs total, X arms total.' "
+        "If you cannot count clearly due to "
+        "occlusion, state that explicitly. "
+        "Do not skip this count.\n\n"
+        "COUNT AND VERIFY:\n"
+        "- Hands: count every visible hand. "
+        "One person = maximum 2 hands. "
+        "3 or more hands with one person = FAIL.\n"
+        "- Fingers: each hand has exactly 5 "
+        "fingers. 4 or 6 fingers = FAIL.\n"
+        "- Legs: count every visible leg. "
+        "One person = maximum 2 legs. "
+        "Extra leg, third leg, leg growing "
+        "from wrong place = FAIL.\n"
+        "- Arms: one person = maximum 2 arms. "
+        "Extra arm = FAIL.\n"
+        "- Head: one person = one head. "
+        "Head size must be proportional to "
+        "body — not tiny or enormous = FAIL.\n"
+        "- Limb proportions: arms and legs "
+        "must be realistic human length. "
+        "Extremely long or short limbs = FAIL.\n"
+        "- Body position: the person must be "
+        "in a physically possible position. "
+        "Floating, impossible twist, or body "
+        "parts at wrong angles = FAIL.\n"
+        "- Clothing: fabric must have real "
+        "texture and folds. Painted-on or "
+        "melted clothing = FAIL.\n\n"
+        "SKIN CHECK:\n"
+        "- Skin must have natural texture — "
+        "pores, slight variation in tone. "
+        "Plastic, waxy, or poreless skin = FAIL.\n"
+        "- Skin colour must be consistent "
+        "across all visible body parts.\n\n"
+        "If ANY of the above fail = "
+        "FAIL this criterion immediately. "
+        "Do not average with other scores.\n\n"
         "For each criterion respond PASS or FAIL "
         "with one sentence reason.\n"
         "Then give OVERALL: PASS or FIX\n"
         "FIX if ANY criterion fails.\n"
-        "If FIX: write a FIX INSTRUCTION — one "
-        "specific sentence. Examples:\n"
-        "For extra zipper: 'Remove the extra "
-        "zipper on [location] — the product "
-        "reference only [N] zipper(s).'\n"
-        "For extra strap: 'Remove the extra "
-        "strap on [location] — not present in "
-        "product reference.'\n"
-        "For pattern: 'Restore the [pattern] "
-        "print to match product reference — "
-        "same motifs, colours, scale.'\n"
-        "For scale: 'Reduce bag size — should "
-        "fit in one hand, not larger than "
-        "model torso.'\n"
+        "If FIX: write a FIX INSTRUCTION that "
+        "addresses EVERY criterion that failed. "
+        "List each required change as a numbered "
+        "point. Do not skip any failed criterion.\n"
+        "Examples:\n"
+        "For one failure: 'Remove the extra "
+        "zipper on [location] — not in reference.'\n"
+        "For two failures: '1. Remove the long "
+        "shoulder strap — not in reference. "
+        "2. Replace the male model with the "
+        "female model from the anchor image.'\n"
         "Be specific about location and what "
-        "needs to change.\n\n"
+        "needs to change for each failure.\n\n"
         "Respond in EXACTLY this format:\n"
         "1. PATTERN ACCURACY: PASS/FAIL — [reason]\n"
         "2. FABRIC QUALITY: PASS/FAIL — [reason]\n"
-        "3. BAG SHAPE: PASS/FAIL — [reason]\n"
+        "3. BAG SIZE AND SCALE: PASS/FAIL — [reason]\n"
         "4. DETAIL FIDELITY: PASS/FAIL — [reason]\n"
         "5. MODEL CONSISTENCY: PASS/FAIL — [reason]\n"
         "6. LIGHTING REALISM: PASS/FAIL — [reason]\n"
         "7. COMPOSITION INTENT: PASS/FAIL — [reason]\n"
         "8. ANTI-AI CHECK: PASS/FAIL — [reason]\n"
-        "9. COMPOSITION REALITY CHECK: PASS/FAIL — [reason]\n"
+        "9. COMPOSITION REALITY CHECK: "
+        "I count: [X people, X hands, X fingers "
+        "per hand, X legs, X arms]. "
+        "PASS/FAIL — [reason]\n"
         "OVERALL: PASS or FIX\n"
         "FIX INSTRUCTION: [specific fix or "
         "'none needed']"
@@ -312,6 +379,15 @@ def _review_image(
     )
 
     review_text = response.text.strip()
+    
+    # Criterion 9 is a hard veto
+    if "9. COMPOSITION REALITY CHECK" in review_text:
+        crit9_section = review_text.split(
+            "9. COMPOSITION REALITY CHECK"
+        )[-1][:200]
+        if "FAIL" in crit9_section.upper():
+            return "FIX", review_text
+
     verdict     = (
         "PASS"
         if "OVERALL: PASS" in review_text.upper()
@@ -383,6 +459,9 @@ def _fix_image(
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE", "TEXT"],
                 temperature=0.2,
+                image_generation_config=types.ImageGenerationConfig(
+                    aspect_ratio="3:4",
+                ),
             ),
         )
 
@@ -414,7 +493,9 @@ def _batch_consistency_check(
     if len(passed_files) < 3:
         return []
 
-    try:
+    max_attempts = 2
+    for check_attempt in range(1, max_attempts + 1):
+      try:
         # Check in batches of 6 to stay within
         # Nano Banana's context limits
         batch_size   = 6
@@ -569,18 +650,48 @@ def _batch_consistency_check(
 
         return to_flag
 
-    except Exception as e:
-        print(f"[PhotoEditor] Batch check error: {e}")
-        return []
+      except Exception as e:
+        print(
+            f"[PhotoEditor] Batch check error "
+            f"(attempt {check_attempt}/{max_attempts}): {e}"
+        )
+        if check_attempt < max_attempts:
+            time.sleep(10)
+
+    print(
+        "[PhotoEditor] ⚠ Batch check failed after "
+        f"{max_attempts} attempts — "
+        "consistency NOT verified for this set"
+    )
+    return []
 
 
 def _extract_fix_instruction(review_text: str) -> str:
-    """Extract the FIX INSTRUCTION line from review text."""
-    for line in review_text.splitlines():
+    """
+    Extract the FIX INSTRUCTION from review text.
+    Captures multi-line instructions so all failures
+    are addressed in a single fix call.
+    """
+    lines = review_text.splitlines()
+    for i, line in enumerate(lines):
         if line.upper().startswith("FIX INSTRUCTION:"):
-            instruction = line.split(":", 1)[-1].strip()
-            if instruction.lower() != "none needed":
-                return instruction
+            first = line.split(":", 1)[-1].strip()
+            parts = [first] if first else []
+            # Collect continuation lines
+            for j in range(i + 1, len(lines)):
+                next_line = lines[j].strip()
+                if not next_line:
+                    break
+                if re.match(
+                    r"^(OVERALL|FIX INSTRUCTION):",
+                    next_line,
+                    re.IGNORECASE,
+                ):
+                    break
+                parts.append(next_line)
+            combined = " ".join(parts).strip()
+            if combined.lower() not in ("none needed", ""):
+                return combined
     return "Fix the most critical issue identified in the review"
 
 
@@ -627,6 +738,8 @@ class PhotoEditorTool(BaseTool):
             technical_spec = _extract_technical_spec()
 
             # ── Load images to review ─────────────────────
+            # _get_asset_dir() already scopes to the current
+            # set's subfolder — no filename filtering needed.
             all_generated = sorted([
                 f for f in _get_asset_dir().iterdir()
                 if f.is_file()
@@ -718,6 +831,7 @@ class PhotoEditorTool(BaseTool):
                 last_fix_review = ""
                 last_fix_instruction = fix_instruction
 
+                attempt = 0
                 for attempt in range(1, 4):
                     print(
                         f"[PhotoEditor] Fix attempt "
@@ -730,6 +844,21 @@ class PhotoEditorTool(BaseTool):
                         gen_bytes,
                         last_fix_instruction,
                     )
+
+                    if not fixed_bytes:
+                        # API error — retry once without
+                        # counting against fix budget
+                        print(
+                            f"[PhotoEditor] API error on "
+                            f"attempt {attempt} — retrying..."
+                        )
+                        time.sleep(10)
+                        fixed_bytes = _fix_image(
+                            client,
+                            product_images,
+                            gen_bytes,
+                            last_fix_instruction,
+                        )
 
                     if not fixed_bytes:
                         print(
@@ -809,8 +938,15 @@ class PhotoEditorTool(BaseTool):
                     continue
 
                 # ── All 3 attempts failed ─────────────────
-                # Rename with "Needs Review-" prefix
-                flagged_name = f"Needs Review-{gen_file.name}"
+                # Rename with "Needs Review-" prefix.
+                # Strip any existing prefix first to
+                # prevent double-prefixing on re-review.
+                base_name = gen_file.name
+                for pfx in ["Needs Review-", "Art Review-"]:
+                    if base_name.startswith(pfx):
+                        base_name = base_name[len(pfx):]
+                        break
+                flagged_name = f"Needs Review-{base_name}"
                 flagged_path = gen_file.parent / flagged_name
                 gen_file.rename(flagged_path)
                 flagged += 1
@@ -852,8 +988,14 @@ class PhotoEditorTool(BaseTool):
             )
 
             for flagged_path, reason in batch_flags:
-                # Rename with Needs Review prefix
-                new_name     = f"Needs Review-{flagged_path.name}"
+                # Rename with Needs Review prefix.
+                # Strip any existing prefix first.
+                base_name = flagged_path.name
+                for pfx in ["Needs Review-", "Art Review-"]:
+                    if base_name.startswith(pfx):
+                        base_name = base_name[len(pfx):]
+                        break
+                new_name     = f"Needs Review-{base_name}"
                 new_path     = flagged_path.parent / new_name
                 flagged_path.rename(new_path)
                 # Update path reference for completeness
@@ -882,7 +1024,7 @@ class PhotoEditorTool(BaseTool):
                 )
             else:
                 print(
-                    f"[PhotoEditor] Batch check passed — "
+                    f"[PhotoEditor] Batch check complete — "
                     f"no additional flags"
                 )
 

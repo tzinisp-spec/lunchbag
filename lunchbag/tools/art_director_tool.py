@@ -8,11 +8,25 @@ from google.genai import types
 
 def _get_asset_dir() -> Path:
     shoot_folder = os.getenv("SHOOT_FOLDER", "")
+    base_dir     = Path("asset_library/images")
     if shoot_folder:
-        return Path(
-            f"asset_library/images/{shoot_folder}"
-        )
-    return Path("asset_library/images")
+        path = base_dir / shoot_folder
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    # Fallback to most recent shoot folder
+    folders = []
+    for month_dir in base_dir.iterdir():
+        if not month_dir.is_dir():
+            continue
+        for shoot_dir in month_dir.iterdir():
+            if (shoot_dir.is_dir()
+                    and shoot_dir.name.startswith(
+                        "Shoot"
+                    )):
+                folders.append(shoot_dir)
+    if folders:
+        return sorted(folders)[-1]
+    return base_dir
 
 OUTPUTS_DIR = Path("outputs")
 REPORTS_DIR = Path("outputs/art_director_reports")

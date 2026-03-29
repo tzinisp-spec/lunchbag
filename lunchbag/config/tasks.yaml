@@ -114,7 +114,7 @@ build_creative_brief:
 
     SHOT REQUIREMENTS
     Total shots: {images_per_sprint}
-    Format split: [feed count] feed (1:1) + [story count] story (9:16)
+    Format: ALL shots are 3:4 portrait orientation — no exceptions.
     SHOT TYPE MIX:
     - bag in use: [N] shots
     - Product only: [N] shots
@@ -146,6 +146,21 @@ build_creative_brief:
 # ════════════════════════════════════════════════════════════
 create_style_bible:
   description: >
+    SET ARCHITECTURE — NON NEGOTIABLE:
+    You must always create EXACTLY 3 sets.
+    No more, no less. Every sprint has 3 sets.
+    Each set must use the location and theme
+    defined in concept.md for that set.
+    Follow the concept.md set definitions
+    exactly — do not invent your own locations.
+
+    SHOT COUNT PER SET — NON NEGOTIABLE:
+    SET 1: exactly 17 shots
+    SET 2: exactly 17 shots
+    SET 3: exactly 16 shots
+    Total: 50 shots across all 3 sets.
+    Count your shots before finalising.
+
     Write the Style Bible and Shot List for
     this sprint based entirely on the
     Creative Brief.
@@ -156,7 +171,7 @@ create_style_bible:
     world with The Lunchbags product.
 
     SET STRUCTURE:
-    Define 2-3 sets based on the distinct
+    Define exactly 3 sets based on the distinct
     scenes visible in the reference images.
     Each set = one reference image concept.
 
@@ -224,21 +239,44 @@ create_style_bible:
     to write 40 different sentences, not the
     same sentence 40 times.
 
-    DISTRIBUTION RULE — PERCENTAGE BASED:
-    Total shots = {images_per_sprint}
-    Distribute across categories using these
-    target percentages. Round to nearest whole
-    number. Any remainder goes to [MODEL] or
-    [PROPS] shots.
+    THREE CORE PILLARS — distribute all shots
+    across these three pillars:
 
-    [HERO]        15% — the definitive shots
-    [MODEL]       20% — full model present
-    [MOTION]      15% — energy and movement
-    [PARTIAL]     10% — hands, legs, arms only
-    [ATMOSPHERE]  10% — wide, setting dominant
-    [DETAIL]      15% — extreme close-ups
-    [PROPS]       10% — product and props only
-    [INTERACTION]  5% — multiple people
+    PILLAR A — FULL MODEL (50% of shots)
+    The model is fully or mostly present.
+    Bag is part of their world.
+    Categories within this pillar:
+    [MODEL] 20% — full model, natural interaction
+    [MOTION] 13% — movement and energy
+    [INTERACTION] 7% — multiple people
+    [ATMOSPHERE] 10% — wide shot, model present
+
+    PILLAR B — DETAILS (25% of shots)
+    No full model. Focus on parts and texture.
+    Categories within this pillar:
+    [PARTIAL] 13% — hands, legs, arms only
+    [DETAIL] 12% — extreme close-up of fabric,
+    hardware, pattern, label
+
+    PILLAR C — OPEN BAG WITH FOOD (25% of shots)
+    Bag is open. Food or drink is visible.
+    Categories within this pillar:
+    [OPEN] 10% — bag open showing contents
+    [UNPACK] 15% — person removing food/drink
+    from open bag — MANDATORY minimum 2 shots
+
+    Total = 100%
+
+    [HERO] and [PROPS] are retired.
+    Every shot must belong to one of the
+    three pillars above.
+
+    For a 17-image set the distribution is:
+    Pillar A: 9 shots (MODEL x3, MOTION x2,
+              INTERACTION x1, ATMOSPHERE x2,
+              one extra MODEL)
+    Pillar B: 4 shots (PARTIAL x2, DETAIL x2)
+    Pillar C: 4 shots (OPEN x2, UNPACK x2)
 
     OPTICAL PROPERTIES — include in composition
     description when relevant to the shot type:
@@ -370,7 +408,7 @@ create_style_bible:
 
     [SHOOT-SPR26-S1-001]
     Shot Type: [bag in use/PRODUCT/DETAIL/LIFESTYLE/HELD]
-    Format: [1:1 or 9:16]
+    Format: 3:4
     Product: [specific Lunchbag bag name]
     Composition: [detailed framing instruction]
     Mood: [feeling]
@@ -453,18 +491,22 @@ build_image_generation_package:
     - If all 3 retries fail mark it as permanently
       failed and continue
 
+    If IMAGES_THIS_SET environment variable
+    is set, generate exactly that many images
+    for the current set and stop.
+
     Before reporting the task complete:
     - Count the actual files in
       asset_library/images/
-    - Compare against {images_per_sprint}
-    - If count is less than {images_per_sprint}
+    - Compare against the target ({images_per_sprint} or IMAGES_THIS_SET if provided)
+    - If count is less than the target
       regenerate the missing shots using their
       ref_codes from the Shot List
     - Only report complete when file count matches
-      {images_per_sprint}
+      the target
 
     Print this line before starting generation:
-    "Starting generation of {images_per_sprint} images.
+    "Starting generation of images.
     Will verify each save before proceeding."
 
     Print this line after every 5 successful saves:
@@ -496,7 +538,7 @@ build_image_generation_package:
     ═══════════════════════════════════════
     Code          | Format | Type         | File Path
     ──────────────|────────|──────────────|──────────────
-    SHOOT-SPR26-S1-001 | 1:1    | promotional  | [path]
+    SHOOT-SPR26-S1-001 | 3:4    | promotional  | [path]
     [continue for all shots]
   agent: photographer
   context:
@@ -593,6 +635,46 @@ run_art_director:
     for rework.
   agent: visual_director
 
+run_copywriter:
+  description: >
+    Run the CopywriterTool to write Instagram
+    copy for all approved images.
+    Call with empty string.
+    The tool reads the Brand Voice Guide and
+    Greek seasonal calendar automatically.
+    Report how many images had copy written.
+  expected_output: >
+    Copy written for all approved images.
+    Saved to outputs/copy_latest.json
+  agent: photographer
+
+run_content_planner:
+  description: >
+    Run ContentPlannerTool to build the weekly
+    Instagram posting calendar.
+    Call with empty string.
+    The tool selects 5 images across content
+    pillars and schedules Mon/Tue/Thu/Fri/Sat.
+    Report the full calendar with dates, times,
+    pillars, and image references.
+  expected_output: >
+    Weekly calendar with 5 posts scheduled.
+    Saved to outputs/weekly_calendar.md
+  agent: photographer
+
+run_review_generator:
+  description: >
+    Run the ReviewGeneratorTool to generate
+    a standalone HTML review file.
+    Call with empty string.
+    The file will be saved to
+    outputs/review.html and can be opened
+    directly in any browser.
+  expected_output: >
+    Review file generated at
+    outputs/review.html
+  agent: photographer
+
 generate_sprint_report:
   description: >
     Generate the final Sprint Report for this sprint.
@@ -620,6 +702,9 @@ generate_sprint_report:
           "photo_ed":   mtime("photo_editor_latest.md"),
           "catalog":    mtime("art_director_latest.md"),
           "art_dir":    mtime("art_director_latest.md"),
+          "copy":       mtime("copy_latest.json"),
+          "planner":    mtime("weekly_calendar.md"),
+          "review":     mtime("review.html"),
           "report":     mtime("sprint_report_latest.md"),
       }
 
@@ -637,6 +722,9 @@ generate_sprint_report:
       - run_photo_editor:            photo_ed - package
       - write_catalog:               catalog - photo_ed
       - run_art_director:            art_dir - catalog
+      - run_copywriter:              copy - art_dir
+      - run_content_planner:         planner - copy
+      - run_review_generator:        review - planner
 
       Sprint start time: use the modification time of
       creative_brief.md minus the known average brief
@@ -656,7 +744,10 @@ generate_sprint_report:
           "run_film_processor": [seconds],
           "run_photo_editor": [seconds],
           "write_catalog": [seconds],
-          "run_art_director": [seconds]
+          "run_art_director": [seconds],
+          "run_copywriter": [seconds],
+          "run_content_planner": [seconds],
+          "run_review_generator": [seconds]
         },
         "images_planned": [read from image_generation_package.md],
         "errors": []

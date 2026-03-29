@@ -37,7 +37,7 @@ class StyleReferenceReaderTool(BaseTool):
                 )
 
             images = sorted([
-                f for f in REFERENCES_DIR.iterdir()
+                f for f in REFERENCES_DIR.rglob("*")
                 if f.is_file()
                 and f.suffix.lower() in supported
             ])

@@ -10,11 +10,28 @@ SUPPORTED = {".jpg", ".jpeg", ".png"}
 
 def _get_asset_dir() -> Path:
     shoot_folder = os.getenv("SHOOT_FOLDER", "")
+    current_set  = int(os.getenv("CURRENT_SET", "0"))
+    base_dir     = Path("asset_library/images")
     if shoot_folder:
-        return Path(
-            f"asset_library/images/{shoot_folder}"
-        )
-    return Path("asset_library/images")
+        path = base_dir / shoot_folder
+        if current_set > 0:
+            path = path / f"Set{current_set}"
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+    # Fallback to most recent shoot folder
+    folders = []
+    for month_dir in base_dir.iterdir():
+        if not month_dir.is_dir():
+            continue
+        for shoot_dir in month_dir.iterdir():
+            if (shoot_dir.is_dir()
+                    and shoot_dir.name.startswith(
+                        "Shoot"
+                    )):
+                folders.append(shoot_dir)
+    if folders:
+        return sorted(folders)[-1]
+    return base_dir
 
 
 def _apply_film_grain(
@@ -102,7 +119,10 @@ class FilmProcessorTool(BaseTool):
                     "found. Run image generation first."
                 )
 
-            # Only process approved images
+            # Only process approved images.
+            # _get_asset_dir() already scopes to the
+            # current set's subfolder so no filename
+            # filtering is needed.
             files = sorted([
                 f for f in asset_dir.iterdir()
                 if f.is_file()

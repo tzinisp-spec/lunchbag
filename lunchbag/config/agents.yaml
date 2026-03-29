@@ -171,6 +171,12 @@ photographer:
     including the buffer shots required by the Buffer Rule.
     Deliver a complete, high-fidelity image catalog ready
     for photo editor review.
+
+    After completing the Art Director review,
+    run the CopywriterTool to write Greek
+    captions and hashtags for all approved
+    images. Then run ContentPlannerTool to
+    build the weekly posting calendar.
   backstory: >
     You are a meticulous production photographer who has managed
     image libraries for fashion brands for 10 years. You
