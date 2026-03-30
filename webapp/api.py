@@ -261,6 +261,106 @@ def shoot_detail(shoot_id):
     return jsonify({**summary, "images": images, "sets": sets})
 
 
+def _shoot_dir_from_id(shoot_id: str):
+    """Return (month_dir, shoot_dir) or raise 404."""
+    parts = shoot_id.split("__")
+    if len(parts) != 2:
+        abort(404)
+    month_name, shoot_name = parts
+    shoot_dir = ASSET_DIR / month_name / shoot_name
+    if not shoot_dir.exists():
+        abort(404)
+    return ASSET_DIR / month_name, shoot_dir
+
+
+def _load_catalog(shoot_dir: Path):
+    """Return (catalog_dict, images_list). Raises 404 if missing."""
+    p = shoot_dir / "catalog.json"
+    if not p.exists():
+        abort(404)
+    catalog = json.loads(p.read_text())
+    return catalog, catalog.get("images", [])
+
+
+def _save_catalog(shoot_dir: Path, catalog: dict):
+    (shoot_dir / "catalog.json").write_text(json.dumps(catalog, indent=2))
+
+
+def _strip_prefix(filename: str) -> str:
+    for prefix in ("Needs Review-", "Regen-"):
+        if filename.startswith(prefix):
+            return filename[len(prefix):]
+    return filename
+
+
+@app.route("/api/shoots/<path:shoot_id>/images/approve", methods=["POST"])
+def approve_images(shoot_id):
+    """Rename Needs-Review/Regen files → clean names, update catalog."""
+    month_dir, shoot_dir = _shoot_dir_from_id(shoot_id)
+    filenames = (request.get_json() or {}).get("filenames", [])
+    if not filenames:
+        abort(400)
+
+    catalog, images = _load_catalog(shoot_dir)
+
+    for filename in filenames:
+        img = next((i for i in images if i["filename"] == filename), None)
+        if not img:
+            continue
+        src = (ROOT / img["path"]).resolve()
+        if not src.exists():
+            img["status"] = "approved"
+            continue
+
+        new_name = _strip_prefix(filename)
+        dest = src.parent / new_name
+        if dest.exists() and dest != src:
+            # avoid overwriting — keep a unique name
+            dest = src.parent / f"approved-{new_name}"
+
+        try:
+            src.rename(dest)
+        except Exception:
+            pass  # file rename failed — still mark approved in catalog
+
+        rel = str(dest.relative_to(ROOT))
+        img["filename"] = dest.name
+        img["path"]     = rel
+        img["id"]       = dest.stem
+        img["ref_code"] = dest.stem
+        img["status"]   = "approved"
+
+    _save_catalog(shoot_dir, catalog)
+    return jsonify(_load_shoot(month_dir, shoot_dir))
+
+
+@app.route("/api/shoots/<path:shoot_id>/images/delete", methods=["POST"])
+def delete_images(shoot_id):
+    """Delete image files from disk and remove them from the catalog."""
+    month_dir, shoot_dir = _shoot_dir_from_id(shoot_id)
+    filenames = (request.get_json() or {}).get("filenames", [])
+    if not filenames:
+        abort(400)
+
+    catalog, images = _load_catalog(shoot_dir)
+    filename_set = set(filenames)
+
+    for img in list(images):
+        if img["filename"] not in filename_set:
+            continue
+        file_path = (ROOT / img["path"]).resolve()
+        try:
+            if file_path.exists():
+                file_path.unlink()
+        except Exception:
+            pass
+        images.remove(img)
+
+    catalog["images"] = images
+    _save_catalog(shoot_dir, catalog)
+    return jsonify(_load_shoot(month_dir, shoot_dir))
+
+
 @app.route("/api/image")
 def serve_image():
     rel_path = request.args.get("path", "")

@@ -73,17 +73,21 @@ function ShootCard({ shoot, onClick }) {
         </div>
 
         {/* Right — counts + status */}
-        <div className="flex items-center gap-8">
+        <div className="flex items-center gap-6">
           <div className="text-center hidden sm:block">
-            <div className="text-white font-semibold">{shoot.approved}</div>
+            <div className="text-white font-semibold">{shoot.total_images}</div>
+            <div className="text-gray-500 text-xs">total</div>
+          </div>
+          <div className="text-center hidden sm:block">
+            <div className="text-green-400 font-semibold">{shoot.approved}</div>
             <div className="text-gray-500 text-xs">approved</div>
           </div>
-          {hasReview && (
-            <div className="text-center">
-              <div className="text-orange-400 font-semibold">{shoot.needs_review}</div>
-              <div className="text-gray-500 text-xs">needs review</div>
+          <div className="text-center hidden sm:block">
+            <div className={`font-semibold ${shoot.needs_review > 0 ? 'text-orange-400' : 'text-gray-600'}`}>
+              {shoot.needs_review}
             </div>
-          )}
+            <div className="text-gray-500 text-xs">review</div>
+          </div>
           <StatusBadge status={shoot.status} dot />
         </div>
 
