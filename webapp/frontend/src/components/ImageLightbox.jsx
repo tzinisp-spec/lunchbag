@@ -1,21 +1,22 @@
 import { useEffect, useCallback } from 'react'
-import { X, ChevronLeft, ChevronRight } from 'lucide-react'
+import { X, ChevronLeft, ChevronRight, Download, Tag, Trash2 } from 'lucide-react'
 import { api } from '../lib/api'
 
 const STATUS_BADGE = {
   needs_review: { label: 'Needs Review', cls: 'bg-orange-500 text-white' },
   regen:        { label: 'Regen',        cls: 'bg-red-600 text-white' },
-  approved:     { label: 'Approved',     cls: 'bg-green-600 text-white' },
+  approved:     { label: 'Approved',     cls: 'bg-green-600/80 text-white' },
 }
 
 /**
  * props:
- *   images       array of image objects from the shoot
- *   index        current index (controlled)
- *   onNavigate   fn(newIndex)
- *   onClose      fn()
+ *   images      array of image objects
+ *   index       current index (controlled)
+ *   onNavigate  fn(newIndex)
+ *   onClose     fn()
+ *   onAction    fn(type, img)  — 'download' | 'remove_tag' | 'delete'
  */
-export default function ImageLightbox({ images, index, onNavigate, onClose }) {
+export default function ImageLightbox({ images, index, onNavigate, onClose, onAction }) {
   const img   = images[index]
   const total = images.length
   const hasPrev = index > 0
@@ -24,7 +25,6 @@ export default function ImageLightbox({ images, index, onNavigate, onClose }) {
   const prev = useCallback(() => { if (hasPrev) onNavigate(index - 1) }, [index, hasPrev, onNavigate])
   const next = useCallback(() => { if (hasNext) onNavigate(index + 1) }, [index, hasNext, onNavigate])
 
-  // Keyboard navigation
   useEffect(() => {
     const handler = (e) => {
       if (e.key === 'ArrowLeft')  prev()
@@ -35,7 +35,6 @@ export default function ImageLightbox({ images, index, onNavigate, onClose }) {
     return () => window.removeEventListener('keydown', handler)
   }, [prev, next, onClose])
 
-  // Lock body scroll
   useEffect(() => {
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = '' }
@@ -43,10 +42,11 @@ export default function ImageLightbox({ images, index, onNavigate, onClose }) {
 
   if (!img) return null
 
-  const badge = STATUS_BADGE[img.display_status]
+  const badge      = STATUS_BADGE[img.display_status]
+  const isReview   = img.display_status === 'needs_review'
 
   return (
-    <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/95">
+    <div className="fixed inset-0 z-[90] flex flex-col items-center justify-center bg-black/95">
 
       {/* Close */}
       <button
@@ -61,7 +61,7 @@ export default function ImageLightbox({ images, index, onNavigate, onClose }) {
         {index + 1} / {total}
       </div>
 
-      {/* Prev arrow */}
+      {/* Prev */}
       <button
         onClick={prev}
         disabled={!hasPrev}
@@ -70,7 +70,7 @@ export default function ImageLightbox({ images, index, onNavigate, onClose }) {
         <ChevronLeft size={24} className="text-white" />
       </button>
 
-      {/* Next arrow */}
+      {/* Next */}
       <button
         onClick={next}
         disabled={!hasNext}
@@ -79,29 +79,71 @@ export default function ImageLightbox({ images, index, onNavigate, onClose }) {
         <ChevronRight size={24} className="text-white" />
       </button>
 
-      {/* Image + meta */}
-      <div className="flex flex-col items-center max-w-[90vw] max-h-[90vh]">
-        <img
-          key={img.path}
-          src={api.imageUrl(img.path)}
-          alt={img.filename}
-          className="max-w-full max-h-[80vh] object-contain rounded-lg shadow-2xl"
-        />
-        <div className="flex items-center gap-3 mt-4">
-          <span className="text-gray-400 text-sm">{img.ref_code?.split('-').slice(-2).join('-')}</span>
+      {/* Image */}
+      <img
+        key={img.path}
+        src={api.imageUrl(img.path)}
+        alt={img.filename}
+        className="max-w-[88vw] max-h-[76vh] object-contain rounded-lg shadow-2xl"
+      />
+
+      {/* Meta + actions */}
+      <div className="flex flex-col items-center gap-3 mt-5">
+        {/* Filename + badge */}
+        <div className="flex items-center gap-3">
+          <span className="text-gray-400 text-sm">
+            {img.ref_code?.split('-').slice(-2).join('-')}
+          </span>
           {badge && (
             <span className={`text-xs px-2 py-0.5 rounded font-medium ${badge.cls}`}>
               {badge.label}
             </span>
           )}
         </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center gap-1">
+          <LightboxAction
+            icon={Download}
+            label="Download"
+            onClick={() => onAction('download', img)}
+          />
+          {isReview && (
+            <LightboxAction
+              icon={Tag}
+              label="Remove Review tag"
+              onClick={() => onAction('remove_tag', img)}
+              color="orange"
+            />
+          )}
+          <LightboxAction
+            icon={Trash2}
+            label="Delete"
+            onClick={() => onAction('delete', img)}
+            color="red"
+          />
+        </div>
       </div>
 
-      {/* Click backdrop to close */}
-      <div
-        className="absolute inset-0 -z-10"
-        onClick={onClose}
-      />
+      {/* Backdrop click to close */}
+      <div className="absolute inset-0 -z-10" onClick={onClose} />
     </div>
+  )
+}
+
+function LightboxAction({ icon: Icon, label, onClick, color }) {
+  const cls = {
+    orange: 'text-orange-400 hover:bg-orange-500/15 hover:text-orange-300',
+    red:    'text-red-400   hover:bg-red-500/15    hover:text-red-300',
+  }[color] ?? 'text-gray-300 hover:bg-gray-700/60 hover:text-white'
+
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); onClick() }}
+      className={`flex items-center gap-2 text-sm px-3 py-1.5 rounded-lg transition-colors ${cls}`}
+    >
+      <Icon size={14} />
+      {label}
+    </button>
   )
 }
