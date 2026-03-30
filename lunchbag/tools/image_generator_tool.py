@@ -515,6 +515,7 @@ def _preflight_check(current_set: int) -> str | None:
 # Global counter for product distribution (thread-safe)
 _GENERATION_COUNTER = 0
 _COUNTER_LOCK = threading.Lock()
+_LOG_LOCK      = threading.Lock()   # serialise multi-line log blocks
 
 class ImageGeneratorTool(BaseTool):
     name: str = "The Lunchbags Image Generator"
@@ -692,6 +693,28 @@ class ImageGeneratorTool(BaseTool):
 
         if not to_generate:
             return f"No shots found for Set {current_set}."
+
+        # ── REGEN_SHOTS filter ────────────────────────
+        # When set, only regenerate the specified shot
+        # codes (e.g. "S1-006,S2-027"). Used by the
+        # auto-regen pass after photo editor.
+        regen_shots_env = os.getenv("REGEN_SHOTS", "")
+        if regen_shots_env:
+            regen_codes = set(regen_shots_env.split(","))
+            to_generate = [
+                t for t in to_generate
+                if t[2] in regen_codes
+            ]
+            print(
+                f"[ImageGenerator] Regen mode: "
+                f"{len(to_generate)} shot(s) targeted — "
+                + ", ".join(regen_codes)
+            )
+            if not to_generate:
+                return (
+                    f"REGEN_NOTHING: none of "
+                    f"{regen_codes} found in shot list."
+                )
 
         # ── Pre-flight: scan refs once for this batch ──
         product_images = _load_folder_images(PRODUCTS_DIR)
@@ -996,10 +1019,13 @@ class ImageGeneratorTool(BaseTool):
             # Prompt LAST
             parts_list.append(types.Part(text=full_prompt))
 
-            print(f"[ImageGenerator] Sending request for {ref_code}...")
-            print(f"[ImageGenerator] - Product: {product_name}")
-            print(f"[ImageGenerator] - Style Refs: {ref_count}")
-            print(f"[ImageGenerator] - Prompt Length: {len(full_prompt)} chars")
+            with _LOG_LOCK:
+                print(
+                    f"[ImageGenerator] Sending request for {ref_code}\n"
+                    f"  Product: {product_name} | "
+                    f"Refs: {ref_count} | "
+                    f"Prompt: {len(full_prompt)} chars"
+                )
 
             # ── Call Nano Banana Pro ──────────────────────
             api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
