@@ -307,7 +307,6 @@ def run():
     )
 
     # ── Compute shoot ID ─────────────────────────────
-    import datetime
     season_code = INPUTS.get(
         "current_season", "SPR-26"
     ).replace(" ", "-").upper()[:6]
