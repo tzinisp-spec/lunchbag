@@ -102,7 +102,7 @@ export default function ShootDetail() {
       let updated
       if (type === 'remove_tag') updated = await api.approveImages(shootId, filenames)
       if (type === 'delete')     updated = await api.deleteImages(shootId, filenames)
-      if (updated) { setShoot(updated); setSelected(new Set()) }
+      if (updated?.images) { setShoot(updated); setSelected(new Set()) }
     } catch (e) {
       console.error(e)
     } finally {

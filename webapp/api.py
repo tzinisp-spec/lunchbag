@@ -209,33 +209,19 @@ def shoots_list():
     return jsonify(_all_shoots())
 
 
-@app.route("/api/shoots/<path:shoot_id>")
-def shoot_detail(shoot_id):
-    # shoot_id format: March2026__Shoot11
-    parts = shoot_id.split("__")
-    if len(parts) != 2:
-        abort(404)
-    month_name, shoot_name = parts
-    shoot_dir = ASSET_DIR / month_name / shoot_name
-
-    if not shoot_dir.exists():
-        abort(404)
-
-    month_dir = ASSET_DIR / month_name
+def _load_shoot_detail(month_dir: Path, shoot_dir: Path) -> dict:
+    """Full shoot detail: summary + annotated image list + sets dict."""
     summary = _load_shoot(month_dir, shoot_dir)
 
-    # Full image list with set breakdown
     catalog_path = shoot_dir / "catalog.json"
-    images = []
+    images: list[dict] = []
     if catalog_path.exists():
         try:
             catalog = json.loads(catalog_path.read_text())
-            raw = catalog.get("images", [])
-            for img in raw:
+            for img in catalog.get("images", []):
                 filename = img.get("filename", "")
                 ref_code = img.get("ref_code", "")
                 set_num  = _set_num(ref_code)
-                # Determine display status
                 if filename.startswith("Regen-"):
                     display_status = "regen"
                 elif "Needs Review" in filename:
@@ -252,13 +238,23 @@ def shoot_detail(shoot_id):
         except Exception:
             pass
 
-    # Group by set
-    sets = {}
+    sets: dict = {}
     for img in images:
-        s = img["set"]
-        sets.setdefault(s, []).append(img)
+        sets.setdefault(img["set"], []).append(img)
 
-    return jsonify({**summary, "images": images, "sets": sets})
+    return {**summary, "images": images, "sets": sets}
+
+
+@app.route("/api/shoots/<path:shoot_id>")
+def shoot_detail(shoot_id):
+    parts = shoot_id.split("__")
+    if len(parts) != 2:
+        abort(404)
+    month_name, shoot_name = parts
+    shoot_dir = ASSET_DIR / month_name / shoot_name
+    if not shoot_dir.exists():
+        abort(404)
+    return jsonify(_load_shoot_detail(ASSET_DIR / month_name, shoot_dir))
 
 
 def _shoot_dir_from_id(shoot_id: str):
@@ -331,7 +327,7 @@ def approve_images(shoot_id):
         img["status"]   = "approved"
 
     _save_catalog(shoot_dir, catalog)
-    return jsonify(_load_shoot(month_dir, shoot_dir))
+    return jsonify(_load_shoot_detail(month_dir, shoot_dir))
 
 
 @app.route("/api/shoots/<path:shoot_id>/images/delete", methods=["POST"])
@@ -358,7 +354,7 @@ def delete_images(shoot_id):
 
     catalog["images"] = images
     _save_catalog(shoot_dir, catalog)
-    return jsonify(_load_shoot(month_dir, shoot_dir))
+    return jsonify(_load_shoot_detail(month_dir, shoot_dir))
 
 
 @app.route("/api/image")
