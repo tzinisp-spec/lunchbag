@@ -755,13 +755,10 @@ class ImageGeneratorTool(BaseTool):
                 if quota_exhausted.is_set():
                     return f"SKIPPED | {ref} (quota exhausted)"
 
-                print(
-                    f"[ImageGenerator] {ref} — "
-                    f"attempt {attempt}..."
-                )
                 res = self._generate_single_shot(
                     prompt, aspect, ref,
                     style_refs=clean_refs,
+                    attempt=attempt,
                 )
                 last_res = res
 
@@ -797,13 +794,10 @@ class ImageGeneratorTool(BaseTool):
                 if quota_exhausted.is_set():
                     return f"SKIPPED | {ref} (quota exhausted)"
                 # Fallback: one attempt without style ref
-                print(
-                    f"[ImageGenerator] {ref} — "
-                    f"fallback attempt (no style ref)..."
-                )
                 res = self._generate_single_shot(
                     prompt, aspect, ref,
                     style_refs=[],
+                    attempt="fallback",
                 )
                 last_res = res
                 if "DAILY_QUOTA_EXHAUSTED" in res:
@@ -866,6 +860,7 @@ class ImageGeneratorTool(BaseTool):
         aspect_ratio: str,
         ref_code: str,
         style_refs: list | None = None,
+        attempt: int | str | None = None,
     ) -> str:
         try:
             valid_ratios = ["1:1", "9:16", "3:4", "4:3", "4:5"]
@@ -1020,8 +1015,12 @@ class ImageGeneratorTool(BaseTool):
             parts_list.append(types.Part(text=full_prompt))
 
             with _LOG_LOCK:
+                attempt_label = (
+                    f" — attempt {attempt}" if attempt is not None else ""
+                )
                 print(
-                    f"[ImageGenerator] Sending request for {ref_code}\n"
+                    f"[ImageGenerator] {ref_code}{attempt_label} — "
+                    f"sending request\n"
                     f"  Product: {product_name} | "
                     f"Refs: {ref_count} | "
                     f"Prompt: {len(full_prompt)} chars"
