@@ -8,6 +8,28 @@ from crewai.tools import BaseTool
 from google import genai
 from google.genai import types
 
+# Issues that cannot be fixed by inpainting — they require a full
+# re-generation of the shot from scratch.
+_STRUCTURAL_KEYWORDS = [
+    "shoulder strap",
+    "crossbody strap",
+    "long strap",
+    "long shoulder",
+    "replace the entire bag",
+    "wrong bag model",
+    "wrong shape",
+    "reduce the scale of the bag",
+    "bag is too large",
+    "bag appears too large",
+]
+
+
+def _is_structural_failure(fix_instruction: str) -> bool:
+    """Return True if the fix cannot be applied via image editing."""
+    lower = fix_instruction.lower()
+    return any(k in lower for k in _STRUCTURAL_KEYWORDS)
+
+
 def _get_asset_dir() -> Path:
     shoot_folder = os.getenv("SHOOT_FOLDER", "")
     current_set  = int(os.getenv("CURRENT_SET", "0"))
@@ -459,7 +481,7 @@ def _fix_image(
             config=types.GenerateContentConfig(
                 response_modalities=["IMAGE", "TEXT"],
                 temperature=0.2,
-                image_generation_config=types.ImageGenerationConfig(
+                image_config=types.ImageConfig(
                     aspect_ratio="3:4",
                 ),
             ),
@@ -472,6 +494,9 @@ def _fix_image(
                     return base64.b64decode(data)
                 return data
 
+    except (AttributeError, TypeError, ImportError,
+            ModuleNotFoundError, NotImplementedError):
+        raise  # Let monitor catch these as fatal — no point retrying
     except Exception as e:
         print(f"[PhotoEditor] Fix error: {e}")
 
@@ -826,6 +851,33 @@ class PhotoEditorTool(BaseTool):
                 )
                 print(f"[PhotoEditor] Fix needed: {fix_instruction}")
 
+                # Structural failures (shoulder strap, wrong bag
+                # model, wrong scale) cannot be removed by editing.
+                # Skip fix attempts — mark for regeneration.
+                if _is_structural_failure(fix_instruction):
+                    print(
+                        f"[PhotoEditor] ✗ Structural failure — "
+                        f"edit cannot fix this. Marking for regen."
+                    )
+                    base_name = gen_file.name
+                    for pfx in ["Needs Review-", "Art Review-", "Regen-"]:
+                        if base_name.startswith(pfx):
+                            base_name = base_name[len(pfx):]
+                            break
+                    regen_name = f"Regen-{base_name}"
+                    regen_path = gen_file.parent / regen_name
+                    gen_file.rename(regen_path)
+                    flagged += 1
+                    print(f"[PhotoEditor] Marked for regen: {regen_name}")
+                    image_results.append({
+                        "file":     regen_name,
+                        "status":   "REGEN_NEEDED",
+                        "review":   review_text,
+                        "fix":      fix_instruction,
+                        "attempts": 0,
+                    })
+                    continue
+
                 best_bytes      = None
                 fix_passed      = False
                 last_fix_review = ""
@@ -1122,5 +1174,8 @@ class PhotoEditorTool(BaseTool):
 
             return report
 
+        except (AttributeError, TypeError, ImportError,
+                ModuleNotFoundError, NotImplementedError) as e:
+            return f"FATAL_ERROR: {type(e).__name__}: {e}"
         except Exception as e:
             return f"TOOL_ERROR: {str(e)}"

@@ -2,11 +2,18 @@ import os
 import re
 import base64
 import time
+import threading
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
 from pathlib import Path
 from crewai.tools import BaseTool
 from google import genai
 from google.genai import types
+
+# Max simultaneous Gemini image generation requests.
+# 3 is conservative — enough to cut generation time ~3x
+# without triggering rate limits.
+MAX_CONCURRENT_SHOTS = 3
 
 def _get_asset_dir() -> Path:
     """
@@ -337,12 +344,11 @@ def _extract_set_dnas() -> list[str]:
     content = style_bible_path.read_text()
 
     # Find all SET DNA PROMPT BLOCKs in order.
-    # Handles two formats:
-    #   Inline:    **SET DNA PROMPT BLOCK:** text here
-    #   Next-line: **SET DNA PROMPT BLOCK:**\ntext here
+    # Handles both bold (**SET DNA PROMPT BLOCK:**)
+    # and plain (SET DNA PROMPT BLOCK:) formatting.
     blocks = re.findall(
-        r"\*\*SET DNA PROMPT BLOCK:\*\*\s*(.*?)"
-        r"(?=\n\s*[═=]{3,}|\n\s*\*\*SET \d|\n\s*SET \d|\Z)",
+        r"\*{0,2}SET DNA PROMPT BLOCK:\*{0,2}\s*(.*?)"
+        r"(?=\n\s*[═=]{3,}|\n\s*\*{0,2}SET \d|\n\s*\[SHOOT-|\Z)",
         content,
         re.DOTALL | re.IGNORECASE,
     )
@@ -506,8 +512,9 @@ def _preflight_check(current_set: int) -> str | None:
     return None
 
 
-# Global counter for product distribution
+# Global counter for product distribution (thread-safe)
 _GENERATION_COUNTER = 0
+_COUNTER_LOCK = threading.Lock()
 
 class ImageGeneratorTool(BaseTool):
     name: str = "The Lunchbags Image Generator"
@@ -704,10 +711,27 @@ class ImageGeneratorTool(BaseTool):
                 f"generating without style references."
             )
 
-        results = []
-        for prompt, aspect, ref in to_generate:
+        # Event set by any worker that hits DAILY_QUOTA_EXHAUSTED.
+        # All other workers check this before starting a new attempt.
+        quota_exhausted = threading.Event()
+
+        def _generate_one(args) -> str:
+            """
+            Per-shot worker: up to 3 attempts with style ref,
+            then one no-ref fallback. Returns the final result
+            string for this shot.
+            """
+            prompt, aspect, ref = args
+
+            if quota_exhausted.is_set():
+                return f"SKIPPED | {ref} (quota exhausted)"
+
             success = False
+            last_res = ""
             for attempt in range(1, 4):
+                if quota_exhausted.is_set():
+                    return f"SKIPPED | {ref} (quota exhausted)"
+
                 print(
                     f"[ImageGenerator] {ref} — "
                     f"attempt {attempt}..."
@@ -716,20 +740,21 @@ class ImageGeneratorTool(BaseTool):
                     prompt, aspect, ref,
                     style_refs=clean_refs,
                 )
+                last_res = res
+
                 if "SUCCESS" in res:
-                    results.append(res)
                     success = True
                     break
                 if "DAILY_QUOTA_EXHAUSTED" in res:
+                    quota_exhausted.set()
                     print(
                         f"\n[ImageGenerator] ✗ DAILY QUOTA EXHAUSTED\n"
                         f"  {res}\n"
-                        f"  Aborting — no further requests will succeed today.\n"
+                        f"  Stopping all workers.\n"
                     )
                     return res
                 print(f"[ImageGenerator] {ref} FAILED: {res}")
-                # BlockedReason.OTHER here means the prompt itself
-                # triggered the filter (refs are pre-validated).
+                # BlockedReason.OTHER = prompt triggered content filter.
                 # No point retrying — go straight to no-ref fallback.
                 if "BlockedReason.OTHER" in res:
                     print(
@@ -746,7 +771,9 @@ class ImageGeneratorTool(BaseTool):
                     time.sleep(20)
 
             if not success:
-                # Fallback: retry once without any style ref
+                if quota_exhausted.is_set():
+                    return f"SKIPPED | {ref} (quota exhausted)"
+                # Fallback: one attempt without style ref
                 print(
                     f"[ImageGenerator] {ref} — "
                     f"fallback attempt (no style ref)..."
@@ -755,25 +782,57 @@ class ImageGeneratorTool(BaseTool):
                     prompt, aspect, ref,
                     style_refs=[],
                 )
+                last_res = res
                 if "DAILY_QUOTA_EXHAUSTED" in res:
+                    quota_exhausted.set()
                     print(
                         f"\n[ImageGenerator] ✗ DAILY QUOTA EXHAUSTED\n"
                         f"  {res}\n"
-                        f"  Aborting — no further requests will succeed today.\n"
+                        f"  Stopping all workers.\n"
                     )
                     return res
                 if "SUCCESS" in res:
-                    results.append(res)
                     print(
                         f"[ImageGenerator] {ref} ✓ "
                         f"fallback succeeded"
                     )
                 else:
-                    results.append(f"FAILED | {ref}")
                     print(
                         f"[ImageGenerator] {ref} ✗ "
                         f"fallback also failed: {res}"
                     )
+                    return f"FAILED | {ref}"
+
+            return last_res
+
+        print(
+            f"[ImageGenerator] Running {len(to_generate)} shots "
+            f"with {MAX_CONCURRENT_SHOTS} concurrent workers..."
+        )
+        results = []
+        with ThreadPoolExecutor(
+            max_workers=MAX_CONCURRENT_SHOTS,
+            thread_name_prefix="ImgGen",
+        ) as pool:
+            futures = {
+                pool.submit(_generate_one, args): args[2]
+                for args in to_generate
+            }
+            for future in as_completed(futures):
+                ref = futures[future]
+                try:
+                    result = future.result()
+                except Exception as exc:
+                    result = f"FAILED | {ref}"
+                    print(
+                        f"[ImageGenerator] {ref} raised "
+                        f"exception: {exc}"
+                    )
+                results.append(result)
+
+        # Hard-stop if quota was hit during parallel run
+        if quota_exhausted.is_set():
+            return "DAILY_QUOTA_EXHAUSTED"
 
         success_count = sum(1 for r in results if "SUCCESS" in r)
         return f"Batch complete. {success_count}/{len(to_generate)} successful."
@@ -799,14 +858,12 @@ class ImageGeneratorTool(BaseTool):
                 )
 
             global _GENERATION_COUNTER
-            idx = (
-                _GENERATION_COUNTER
-                % len(product_images)
-            )
+            with _COUNTER_LOCK:
+                idx = _GENERATION_COUNTER % len(product_images)
+                _GENERATION_COUNTER += 1
             product_bytes, product_mime, product_name = (
                 product_images[idx]
             )
-            _GENERATION_COUNTER += 1
 
             # ── Extract set DNAs ──────────────────────────
             set_dnas  = _extract_set_dnas()
@@ -878,6 +935,16 @@ class ImageGeneratorTool(BaseTool):
                 concept_block = ""
 
             full_prompt = (
+                f"HARD CONSTRAINTS — VIOLATIONS = WRONG IMAGE:\n"
+                f"1. NO shoulder strap. NO crossbody strap. "
+                f"NO long strap of any kind. "
+                f"The bag has ONE short top handle only.\n"
+                f"2. The bag pattern must EXACTLY match "
+                f"the product reference — same motifs, "
+                f"same colours, same scale.\n"
+                f"3. The bag is a compact lunch bag "
+                f"(H21cm x W16cm x D24cm). NOT a tote, "
+                f"NOT a backpack, NOT a messenger bag.\n\n"
                 f"IMAGE REFERENCES:\n"
                 f"IMAGE 1: Product — reproduce this "
                 f"bag exactly: same pattern, fabric, "
@@ -957,10 +1024,16 @@ class ImageGeneratorTool(BaseTool):
                     config=types.GenerateContentConfig(
                         response_modalities=["IMAGE", "TEXT"],
                         temperature=0.7,
-                        image_generation_config=types.ImageGenerationConfig(
+                        image_config=types.ImageConfig(
                             aspect_ratio=aspect_ratio,
                         ),
                     ),
+                )
+            except (AttributeError, TypeError, ImportError,
+                    ModuleNotFoundError, NotImplementedError) as api_err:
+                # Programming error — retrying will never help
+                return (
+                    f"FATAL_ERROR: {type(api_err).__name__}: {api_err}"
                 )
             except Exception as api_err:
                 err_str = str(api_err)

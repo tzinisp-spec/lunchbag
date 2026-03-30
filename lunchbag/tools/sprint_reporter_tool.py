@@ -42,11 +42,16 @@ def _get_catalog_path() -> Path:
     return Path("asset_library/catalog.json")
 SUPPORTED    = {".jpg", ".jpeg", ".png"}
 
-# Approximate cost per API call (USD)
-COST_PER_CALL = {
-    "gemini-2.5-pro":           0.0035,
-    "gemini-3-pro-image-preview": 0.040,
-}
+# Gemini pricing (USD) — updated March 2026
+# image-preview: $0.134 per output image (1K-2K res) + ~$0.009 input tokens
+# 2.5-pro: $1.25/M input tokens + $10/M output tokens
+# Typical review call: ~1.4K input + ~500 output = ~$0.0067
+# Typical batch-check call: ~4.4K input + ~300 output = ~$0.009
+COST_IMAGE_GENERATION  = 0.143   # output image + input tokens per generation call
+COST_IMAGE_FIX         = 0.139   # output image + input tokens per fix call
+COST_REVIEW_CALL       = 0.007   # gemini-2.5-pro review (1 image)
+COST_BATCH_CHECK_CALL  = 0.009   # gemini-2.5-pro batch check (6 images)
+COST_TEXT_CALL         = 0.005   # gemini-2.5-pro text-only call (art director, copywriter, etc.)
 
 
 def _parse_photo_editor_report() -> dict:
@@ -620,27 +625,43 @@ def _estimate_costs(
     ad_data: dict,
     images_generated: int,
 ) -> dict:
-    fixes_attempted = (
-        pe_data.get("fixed", 0) * 2
+    # image-preview calls
+    # Assume avg 1.3 generation attempts per image
+    # (best case 1, some need 2-3)
+    gen_calls  = int(images_generated * 1.3)
+    fix_calls  = (
+        pe_data.get("fix_attempts", {}).get("1", 0)
+        + pe_data.get("fix_attempts", {}).get("2", 0) * 2
+        + pe_data.get("fix_attempts", {}).get("3", 0) * 3
         + pe_data.get("flagged", 0) * 3
     )
+    preflight_calls = 9  # 3 sets × 3 refs
 
-    nano_banana_calls = images_generated + fixes_attempted
-    gemini_review_calls = (
-        pe_data.get("total", 0) * 2
-        + ad_data.get("total", 0)
-    )
+    # gemini-2.5-pro calls
+    review_calls      = pe_data.get("total", 0)
+    batch_check_calls = max(1, review_calls // 6)
+    text_calls        = 4  # style ref, art director, content planner, review gen
 
-    nano_cost   = nano_banana_calls * COST_PER_CALL["gemini-3-pro-image-preview"]
-    gemini_cost = gemini_review_calls * COST_PER_CALL["gemini-2.5-pro"]
-    total_cost  = nano_cost + gemini_cost
+    gen_cost      = gen_calls * COST_IMAGE_GENERATION
+    fix_cost      = fix_calls * COST_IMAGE_FIX
+    preflight_cost = preflight_calls * COST_IMAGE_GENERATION
+    review_cost   = review_calls * COST_REVIEW_CALL
+    batch_cost    = batch_check_calls * COST_BATCH_CHECK_CALL
+    text_cost     = text_calls * COST_TEXT_CALL
+    total_cost    = gen_cost + fix_cost + preflight_cost + review_cost + batch_cost + text_cost
 
     return {
-        "nano_banana_calls":   nano_banana_calls,
-        "gemini_review_calls": gemini_review_calls,
-        "nano_cost_usd":       round(nano_cost, 3),
-        "gemini_cost_usd":     round(gemini_cost, 3),
-        "total_cost_usd":      round(total_cost, 3),
+        "gen_calls":           gen_calls,
+        "fix_calls":           fix_calls,
+        "preflight_calls":     preflight_calls,
+        "review_calls":        review_calls,
+        "batch_check_calls":   batch_check_calls,
+        "text_calls":          text_calls,
+        "total_calls":         gen_calls + fix_calls + preflight_calls + review_calls + batch_check_calls + text_calls,
+        "gen_cost_usd":        round(gen_cost, 2),
+        "fix_cost_usd":        round(fix_cost, 2),
+        "review_cost_usd":     round(review_cost + batch_cost + text_cost, 2),
+        "total_cost_usd":      round(total_cost, 2),
     }
 
 
@@ -656,9 +677,22 @@ class SprintReporterTool(BaseTool):
     def _run(self, input_str: str = "") -> str:
         try:
             timing = {}
+            # 1. Try JSON passed directly (from main.py)
             try:
                 timing = json.loads(input_str)
             except Exception:
+                pass
+
+            # 2. Fall back to saved shoot_timing.json
+            if not timing:
+                timing_file = OUTPUTS_DIR / "shoot_timing.json"
+                if timing_file.exists():
+                    try:
+                        timing = json.loads(timing_file.read_text())
+                    except Exception:
+                        pass
+
+            if not timing:
                 timing = {
                     "started_at":     datetime.now().isoformat(),
                     "steps":          {},
@@ -842,9 +876,30 @@ class SprintReporterTool(BaseTool):
                 secs = step_timings.get(key, 0)
                 report += f"| {label} | {fmt_seconds(secs)} |\n"
 
+            report += f"| **Total** | **{total_runtime}** |\n"
+
+            # Per-set timing from shoot_timing.json
+            set_timings = timing.get("set_timings", [])
+            if set_timings:
+                report += (
+                    f"\n### Per-Set Breakdown\n\n"
+                    f"| Set | Images | Gen | Film | Editor | Catalog | Total |\n"
+                    f"|---|---|---|---|---|---|---|\n"
+                )
+                for st in set_timings:
+                    steps = st.get("steps", {})
+                    report += (
+                        f"| Set {st['set']} "
+                        f"| {st.get('images', '?')} "
+                        f"| {fmt_seconds(steps.get('image_generation', 0))} "
+                        f"| {fmt_seconds(steps.get('film_processing', 0))} "
+                        f"| {fmt_seconds(steps.get('photo_editor', 0))} "
+                        f"| {fmt_seconds(steps.get('catalog', 0))} "
+                        f"| {fmt_seconds(st.get('duration_s', 0))} |\n"
+                    )
+
             report += (
-                f"| **Total** | **{total_runtime}** |\n\n"
-                f"{'='*55}\n"
+                f"\n{'='*55}\n"
                 f"## 3. GENERATION METRICS\n"
                 f"{'='*55}\n\n"
                 f"| Metric | Value |\n"
@@ -974,11 +1029,25 @@ class SprintReporterTool(BaseTool):
                 f"\n{'='*55}\n"
                 f"## 7. API USAGE & ESTIMATED COST\n"
                 f"{'='*55}\n\n"
-                f"| Model | Calls | Est. Cost |\n"
+                f"### gemini-3-pro-image-preview\n\n"
+                f"| Operation | Calls | Est. Cost |\n"
                 f"|---|---|---|\n"
-                f"| Nano Banana (generation + fixes) | {costs['nano_banana_calls']} | ${costs['nano_cost_usd']} |\n"
-                f"| Gemini 2.5 Pro (reviews) | {costs['gemini_review_calls']} | ${costs['gemini_cost_usd']} |\n"
-                f"| **Total** | **{costs['nano_banana_calls'] + costs['gemini_review_calls']}** | **${costs['total_cost_usd']}** |\n\n"
+                f"| Image generation (~1.3 attempts avg) | {costs['gen_calls']} | ${costs['gen_cost_usd']} |\n"
+                f"| Photo editor fixes | {costs['fix_calls']} | ${costs['fix_cost_usd']} |\n"
+                f"| Pre-flight ref scans | {costs['preflight_calls']} | ~$0.00 |\n\n"
+                f"### gemini-2.5-pro\n\n"
+                f"| Operation | Calls | Est. Cost |\n"
+                f"|---|---|---|\n"
+                f"| Photo editor reviews | {costs['review_calls']} | — |\n"
+                f"| Batch consistency checks | {costs['batch_check_calls']} | — |\n"
+                f"| Creative + content text calls | {costs['text_calls']} | — |\n"
+                f"| **Subtotal** | **{costs['review_calls'] + costs['batch_check_calls'] + costs['text_calls']}** | **${costs['review_cost_usd']}** |\n\n"
+                f"### Summary\n\n"
+                f"| | Calls | Est. Cost |\n"
+                f"|---|---|---|\n"
+                f"| Image generation model | {costs['gen_calls'] + costs['fix_calls'] + costs['preflight_calls']} | ${round(costs['gen_cost_usd'] + costs['fix_cost_usd'], 2)} |\n"
+                f"| Text/vision model | {costs['review_calls'] + costs['batch_check_calls'] + costs['text_calls']} | ${costs['review_cost_usd']} |\n"
+                f"| **Total** | **{costs['total_calls']}** | **${costs['total_cost_usd']}** |\n\n"
                 f"{'='*55}\n"
                 f"## 8. ERRORS & WARNINGS\n"
                 f"{'='*55}\n\n"

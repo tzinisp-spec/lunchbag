@@ -1,10 +1,11 @@
 import os
 import re
 import sys
+import json
 import time
 import calendar as cal_module
 from pathlib import Path
-from datetime import date
+from datetime import date, datetime
 from dotenv import load_dotenv
 from lunchbag.crew import LunchbagCrew
 from lunchbag.trend_crew import LunchbagTrendCrew
@@ -12,6 +13,7 @@ from lunchbag.tools.image_generator_tool import ImageGeneratorTool
 from lunchbag.tools.film_processor_tool import FilmProcessorTool
 from lunchbag.tools.photo_editor_tool import PhotoEditorTool
 from lunchbag.tools.catalog_writer_tool import CatalogWriterTool
+from lunchbag.tools.sprint_reporter_tool import SprintReporterTool
 
 load_dotenv()
 
@@ -40,8 +42,22 @@ INPUTS = {
 
 # ── Monitor ──────────────────────────────────────────────
 
+FATAL_EXCEPTION_TYPES = (
+    AttributeError,
+    TypeError,
+    ImportError,
+    ModuleNotFoundError,
+    SyntaxError,
+    NotImplementedError,
+)
+
+
 def _is_quota_exhausted(result: str) -> bool:
     return "DAILY_QUOTA_EXHAUSTED" in result
+
+
+def _is_fatal_error(result: str) -> bool:
+    return "FATAL_ERROR:" in result
 
 
 def _run_step_with_retry(
@@ -52,8 +68,11 @@ def _run_step_with_retry(
 ) -> tuple[bool, str]:
     """
     Run a pipeline step with automatic retry.
-    - Retries up to max_attempts on failure.
+    - Retries up to max_attempts on transient failures.
     - Hard-stops immediately on daily quota exhaustion.
+    - Hard-stops immediately on fatal errors (code bugs,
+      missing attributes, bad imports) that will never
+      resolve on retry.
     - Returns (success, last_result).
     """
     last_result = ""
@@ -64,6 +83,8 @@ def _run_step_with_retry(
         )
         try:
             last_result = step_fn()
+        except FATAL_EXCEPTION_TYPES as e:
+            last_result = f"FATAL_ERROR: {type(e).__name__}: {e}"
         except Exception as e:
             last_result = f"EXCEPTION: {e}"
 
@@ -74,6 +95,14 @@ def _run_step_with_retry(
                 f"\n[Monitor] ✗ DAILY API QUOTA EXHAUSTED\n"
                 f"  Pipeline stopped. "
                 f"Resume tomorrow.\n"
+            )
+            sys.exit(1)
+
+        if _is_fatal_error(last_result):
+            print(
+                f"\n[Monitor] ✗ FATAL ERROR — retrying will not help.\n"
+                f"  Fix the underlying issue and re-run.\n"
+                f"  {last_result}\n"
             )
             sys.exit(1)
 
@@ -137,6 +166,7 @@ def _check_photo_editor(result: str) -> bool:
         "PASS" in result
         or "FIXED" in result
         or "FLAGGED" in result
+        or "REGEN_NEEDED" in result
     )
 
 
@@ -191,41 +221,58 @@ def get_images_per_set(
 
 # ── Set pipeline ─────────────────────────────────────────
 
-def run_set(set_num: int, images_this_set: int):
+def run_set(set_num: int, images_this_set: int) -> dict:
+    """Run all steps for one set. Returns timing dict."""
     os.environ["CURRENT_SET"]     = str(set_num)
     os.environ["IMAGES_THIS_SET"] = str(images_this_set)
 
+    set_start = time.time()
+    step_times = {}
+
     # Step 1 — Image Generation
+    t0 = time.time()
     ok, result = _run_step_with_retry(
         f"Set {set_num} — Image Generation",
         lambda: ImageGeneratorTool()._run(""),
         lambda r: _check_image_gen(r, images_this_set),
     )
-    if not ok:
-        # Partial generation is still usable —
-        # continue but log the warning.
-        pass
+    step_times["image_generation"] = int(time.time() - t0)
 
     # Step 2 — Film Processing
+    t0 = time.time()
     _run_step_with_retry(
         f"Set {set_num} — Film Processing",
         lambda: FilmProcessorTool()._run(""),
         _check_film_processor,
     )
+    step_times["film_processing"] = int(time.time() - t0)
 
     # Step 3 — Photo Editor
+    t0 = time.time()
     _run_step_with_retry(
         f"Set {set_num} — Photo Editor",
         lambda: PhotoEditorTool()._run(""),
         _check_photo_editor,
     )
+    step_times["photo_editor"] = int(time.time() - t0)
 
     # Step 4 — Catalog
+    t0 = time.time()
     _run_step_with_retry(
         f"Set {set_num} — Catalog",
         lambda: CatalogWriterTool()._run(""),
         _check_catalog,
     )
+    step_times["catalog"] = int(time.time() - t0)
+
+    return {
+        "set":        set_num,
+        "images":     images_this_set,
+        "start_ts":   set_start,
+        "end_ts":     time.time(),
+        "duration_s": int(time.time() - set_start),
+        "steps":      step_times,
+    }
 
 
 # ── Trend scout ──────────────────────────────────────────
@@ -261,7 +308,6 @@ def run():
     )
 
     # ── Compute shoot ID ─────────────────────────────
-    import datetime
     season_code = INPUTS.get(
         "current_season", "SPR-26"
     ).replace(" ", "-").upper()[:6]
@@ -333,7 +379,10 @@ def run():
     print("="*60 + "\n")
 
     # ── Phase 1b — Generate all sets ─────────────────
-    total_images = int(INPUTS.get("images_per_sprint", "50"))
+    total_images   = int(INPUTS.get("images_per_sprint", "50"))
+    shoot_start    = time.time()
+    phase1_end     = time.time()   # creative planning just finished
+    set_timings    = []
 
     for set_num in range(1, TOTAL_SETS + 1):
         print("\n" + "="*60)
@@ -346,7 +395,8 @@ def run():
         images_this_set = get_images_per_set(
             total_images, TOTAL_SETS, set_num
         )
-        run_set(set_num, images_this_set)
+        set_result = run_set(set_num, images_this_set)
+        set_timings.append(set_result)
 
         print("\n" + "="*60)
         if set_num < TOTAL_SETS:
@@ -361,6 +411,44 @@ def run():
         print("="*60 + "\n")
 
     os.environ["CURRENT_SET"] = "0"
+
+    # ── Save timing for sprint reporter ──────────────
+    shoot_end = time.time()
+    try:
+        timing_data = {
+            "shoot_start":     shoot_start,
+            "phase1_end":      phase1_end,
+            "phase1_duration": int(phase1_end - shoot_start),
+            "set_timings":     set_timings,
+            "shoot_end":       shoot_end,
+            "total_duration":  int(shoot_end - shoot_start),
+            "started_at":      datetime.fromtimestamp(
+                                   shoot_start
+                               ).isoformat(),
+        }
+        timing_path = Path("outputs/shoot_timing.json")
+        timing_path.write_text(json.dumps(timing_data, indent=2))
+    except Exception as e:
+        print(f"\n[Monitor] ⚠ Could not save timing data: {e}")
+        timing_data = {}
+
+    # ── Sprint Report ─────────────────────────────────
+    print("\n" + "="*60)
+    print("  GENERATING SPRINT REPORT")
+    print("="*60 + "\n")
+    try:
+        _run_step_with_retry(
+            "Sprint Report",
+            lambda: SprintReporterTool()._run(json.dumps(timing_data)),
+            lambda r: "Sprint Report saved to" in r,
+        )
+    except Exception as e:
+        print(
+            f"\n[Monitor] ⚠ Sprint report failed: {e}\n"
+            f"  All {TOTAL_SETS} sets completed successfully.\n"
+            f"  Timing data: outputs/shoot_timing.json\n"
+            f"  Run SprintReporterTool manually if needed.\n"
+        )
 
 
 if __name__ == "__main__":
