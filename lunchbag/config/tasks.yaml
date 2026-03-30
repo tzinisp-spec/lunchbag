@@ -208,6 +208,46 @@ create_style_bible:
       inspire fresh compositions not replicate
       a specific scene.
 
+      HARD RULE FOR DNA BLOCKS:
+      Never write language that implies the bag is
+      worn over the shoulder, carried crossbody,
+      or slung like a messenger bag. This product
+      has ONE short top handle only. If the ref
+      shows a crossbody bag — adapt the scene
+      to a hand-held or set-down composition.
+      Never copy a carry method that requires
+      a strap.
+
+    MODEL ANCHOR PER SET:
+    For each set that includes a model,
+    write a MODEL ANCHOR block immediately
+    after the SET DNA PROMPT BLOCK:
+    "MODEL ANCHOR — SET N: [gender, approximate
+    age, skin tone, hair, clothing style — based
+    strictly on the Set N reference images.
+    This person must appear consistently in
+    every model shot of this set.]"
+
+    Do not write one global model description.
+    Each set has its own anchor drawn from
+    its own references. If a set has no model
+    write "MODEL ANCHOR — SET N: No model.
+    Product-only shots."
+
+    QUALITY GATE — ALL 3 SETS:
+    Before finalising the style bible, review
+    all three SET DNA PROMPT BLOCKs side by side.
+    Each must be:
+    - 60-80 words (same length, same depth)
+    - Equally specific in lighting, colour,
+      energy, and model presence
+    - Free of any shoulder-strap or crossbody
+      carry language
+
+    Set 3 must be as complete and specific as
+    Set 1. Rewrite any set that falls short
+    before submitting.
+
     SHOT LIST:
     Write {images_per_sprint} shots.
     Each shot must feel like it could have
@@ -392,14 +432,26 @@ create_style_bible:
     SHOOT STRUCTURE
     ═══════════════════════════════════════
 
-    [Define SET 1, SET 2, and optionally SET 3 here following 
-    the location/lighting/surface/mood/focus/DNA structure]
+    [Define SET 1, SET 2, and SET 3 here — all three
+    are mandatory and must be equally detailed.
+    Follow location/lighting/surface/mood/focus/DNA
+    structure for each set. Include MODEL ANCHOR
+    per set immediately after each SET DNA PROMPT BLOCK.]
 
     ═══════════════════════════════════════
-    MODEL CONSISTENCY
+    MODEL ANCHORS (one per set)
     ═══════════════════════════════════════
 
-    [Strict description of the model to be used across all sets]
+    MODEL ANCHOR — SET 1: [gender, age range, skin tone,
+    hair, clothing — from Set 1 reference images only]
+
+    MODEL ANCHOR — SET 2: [gender, age range, skin tone,
+    hair, clothing — from Set 2 reference images only.
+    May differ from Set 1 if refs show a different person.]
+
+    MODEL ANCHOR — SET 3: [gender, age range, skin tone,
+    hair, clothing — from Set 3 reference images only.
+    May differ from Sets 1 and 2 if refs show a different person.]
 
     ═══════════════════════════════════════
     PART 3 — SHOT LIST
@@ -410,9 +462,11 @@ create_style_bible:
     Shot Type: [bag in use/PRODUCT/DETAIL/LIFESTYLE/HELD]
     Format: 3:4
     Product: [specific Lunchbag bag name]
-    Composition: [detailed framing instruction]
+    Composition: [detailed framing instruction — never
+    imply crossbody carry or shoulder strap carry]
     Mood: [feeling]
     Notes: STANDARD or [deviation]
+    Model: [matches MODEL ANCHOR for this set, or N/A]
 
     [repeat for every shot]
   agent: visual_director
