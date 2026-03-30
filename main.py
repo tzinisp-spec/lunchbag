@@ -166,6 +166,7 @@ def _check_photo_editor(result: str) -> bool:
         "PASS" in result
         or "FIXED" in result
         or "FLAGGED" in result
+        or "REGEN_NEEDED" in result
     )
 
 
@@ -412,28 +413,42 @@ def run():
     os.environ["CURRENT_SET"] = "0"
 
     # ── Save timing for sprint reporter ──────────────
-    shoot_end   = time.time()
-    timing_data = {
-        "shoot_start":     shoot_start,
-        "phase1_end":      phase1_end,
-        "phase1_duration": int(phase1_end - shoot_start),
-        "set_timings":     set_timings,
-        "shoot_end":       shoot_end,
-        "total_duration":  int(shoot_end - shoot_start),
-        "started_at":      datetime.fromtimestamp(shoot_start).isoformat(),
-    }
-    timing_path = Path("outputs/shoot_timing.json")
-    timing_path.write_text(json.dumps(timing_data, indent=2))
+    shoot_end = time.time()
+    try:
+        timing_data = {
+            "shoot_start":     shoot_start,
+            "phase1_end":      phase1_end,
+            "phase1_duration": int(phase1_end - shoot_start),
+            "set_timings":     set_timings,
+            "shoot_end":       shoot_end,
+            "total_duration":  int(shoot_end - shoot_start),
+            "started_at":      datetime.fromtimestamp(
+                                   shoot_start
+                               ).isoformat(),
+        }
+        timing_path = Path("outputs/shoot_timing.json")
+        timing_path.write_text(json.dumps(timing_data, indent=2))
+    except Exception as e:
+        print(f"\n[Monitor] ⚠ Could not save timing data: {e}")
+        timing_data = {}
 
     # ── Sprint Report ─────────────────────────────────
     print("\n" + "="*60)
     print("  GENERATING SPRINT REPORT")
     print("="*60 + "\n")
-    _run_step_with_retry(
-        "Sprint Report",
-        lambda: SprintReporterTool()._run(json.dumps(timing_data)),
-        lambda r: "Sprint Report saved to" in r,
-    )
+    try:
+        _run_step_with_retry(
+            "Sprint Report",
+            lambda: SprintReporterTool()._run(json.dumps(timing_data)),
+            lambda r: "Sprint Report saved to" in r,
+        )
+    except Exception as e:
+        print(
+            f"\n[Monitor] ⚠ Sprint report failed: {e}\n"
+            f"  All {TOTAL_SETS} sets completed successfully.\n"
+            f"  Timing data: outputs/shoot_timing.json\n"
+            f"  Run SprintReporterTool manually if needed.\n"
+        )
 
 
 if __name__ == "__main__":

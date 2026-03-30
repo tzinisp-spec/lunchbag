@@ -935,6 +935,16 @@ class ImageGeneratorTool(BaseTool):
                 concept_block = ""
 
             full_prompt = (
+                f"HARD CONSTRAINTS — VIOLATIONS = WRONG IMAGE:\n"
+                f"1. NO shoulder strap. NO crossbody strap. "
+                f"NO long strap of any kind. "
+                f"The bag has ONE short top handle only.\n"
+                f"2. The bag pattern must EXACTLY match "
+                f"the product reference — same motifs, "
+                f"same colours, same scale.\n"
+                f"3. The bag is a compact lunch bag "
+                f"(H21cm x W16cm x D24cm). NOT a tote, "
+                f"NOT a backpack, NOT a messenger bag.\n\n"
                 f"IMAGE REFERENCES:\n"
                 f"IMAGE 1: Product — reproduce this "
                 f"bag exactly: same pattern, fabric, "
