@@ -2,7 +2,6 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, X, Check, Download, Tag, Trash2, CheckSquare, MoreHorizontal } from 'lucide-react'
 import { api } from '../lib/api'
-import StatCard from '../components/StatCard'
 import StatusBadge from '../components/StatusBadge'
 import ImageLightbox from '../components/ImageLightbox'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -173,19 +172,66 @@ export default function ShootDetail() {
         <StatusBadge status={shoot.status} dot />
       </div>
 
-      {/* Image counts */}
-      <div className="grid grid-cols-3 gap-3 mb-8">
-        <CountCard value={totalImages} label="Total images" />
-        <CountCard value={approved}    label="Approved"     color="green"  />
-        <CountCard value={needsReview} label="Needs review" color={needsReview > 0 ? 'orange' : undefined} />
-      </div>
+      {/* ── 5 metric tiles ── */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
 
-      {/* Sprint stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8">
-        <StatCard label="Runtime"   value={shoot.runtime ?? '—'} />
-        <StatCard label="API Calls" value={shoot.total_calls?.toLocaleString() ?? '—'} />
-        <StatCard label="Cost"      value={shoot.total_cost > 0 ? `$${shoot.total_cost.toFixed(2)}` : '—'} />
-        <StatCard label="Errors"    value={shoot.errors ?? '0'} />
+        {/* Produced Images */}
+        <DetailTile
+          title="Produced Images"
+          main={totalImages}
+          mainLabel="total images"
+          items={[
+            { label: 'Approved',     value: approved,    color: 'green'  },
+            { label: 'Needs review', value: needsReview, color: needsReview > 0 ? 'orange' : 'muted' },
+            ...(shoot.regen > 0 ? [{ label: 'Regen', value: shoot.regen, color: 'red' }] : []),
+          ]}
+        />
+
+        {/* Processing Time */}
+        <DetailTile
+          title="Processing Time"
+          main={shoot.runtime ?? '—'}
+          mainLabel="total"
+          items={[
+            { label: 'Generation',   value: shoot.time_generation   || '—' },
+            { label: 'Photo Editor', value: shoot.time_photo_editor || '—' },
+            { label: 'Brief',        value: shoot.time_brief        || '—' },
+          ]}
+        />
+
+        {/* API Calls */}
+        <DetailTile
+          title="API Calls"
+          main={shoot.total_calls?.toLocaleString() ?? '—'}
+          mainLabel="total calls"
+          items={[
+            { label: modelShortName(shoot.image_model_name), value: shoot.calls_image_model?.toLocaleString() ?? '—' },
+            { label: modelShortName(shoot.text_model_name),  value: shoot.calls_text_model?.toLocaleString()  ?? '—' },
+          ]}
+        />
+
+        {/* Cost */}
+        <DetailTile
+          title="Cost"
+          main={shoot.total_cost > 0 ? `$${shoot.total_cost.toFixed(2)}` : '—'}
+          mainLabel="total"
+          items={[
+            { label: modelShortName(shoot.image_model_name), value: shoot.cost_image_model > 0 ? `$${shoot.cost_image_model.toFixed(2)}` : '—' },
+            { label: modelShortName(shoot.text_model_name),  value: shoot.cost_text_model  > 0 ? `$${shoot.cost_text_model.toFixed(2)}`  : '—' },
+          ]}
+        />
+
+        {/* Errors */}
+        <DetailTile
+          title="Errors"
+          main={shoot.errors_total > 0 ? shoot.errors_total : shoot.errors ?? '0'}
+          mainLabel="total issues"
+          items={[
+            { label: 'Fixed by editor', value: shoot.errors_fixed   ?? '0', color: 'green'  },
+            { label: 'Needs review',    value: shoot.errors_flagged ?? '0', color: shoot.errors_flagged > 0 ? 'orange' : 'muted' },
+          ]}
+        />
+
       </div>
 
       {/* Per-set breakdown */}
@@ -460,15 +506,44 @@ function ActionButton({ icon: Icon, label, onClick, disabled, color }) {
   )
 }
 
-function CountCard({ value, label, color }) {
-  const valueColor  = { green: 'text-green-400', orange: 'text-orange-400' }[color] ?? 'text-white'
-  const borderColor = { green: 'border-green-900/40', orange: 'border-orange-900/50' }[color] ?? 'border-gray-800'
+// ── Detail tile ───────────────────────────────────────────────────────────────
+
+const VALUE_COLOR = {
+  green:  'text-green-400',
+  orange: 'text-orange-400',
+  red:    'text-red-400',
+  muted:  'text-gray-600',
+}
+
+function DetailTile({ title, main, mainLabel, items = [] }) {
   return (
-    <div className={`bg-gray-900 border ${borderColor} rounded-lg px-5 py-4 text-center`}>
-      <div className={`text-2xl font-semibold ${valueColor}`}>{value}</div>
-      <div className="text-gray-500 text-xs mt-1">{label}</div>
+    <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 flex flex-col">
+      <div className="text-gray-500 text-xs uppercase tracking-wider mb-3">{title}</div>
+      <div className="text-2xl text-white font-semibold leading-none">{main}</div>
+      {mainLabel && <div className="text-gray-600 text-xs mt-1">{mainLabel}</div>}
+      {items.length > 0 && (
+        <div className="mt-3 pt-3 border-t border-gray-800 space-y-1.5 flex-1">
+          {items.map((item, i) => (
+            <div key={i} className="flex items-center justify-between gap-2">
+              <span className="text-gray-500 text-xs truncate">{item.label}</span>
+              <span className={`text-xs font-medium shrink-0 ${VALUE_COLOR[item.color] ?? 'text-gray-300'}`}>
+                {item.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
+}
+
+function modelShortName(name) {
+  if (!name) return 'Unknown'
+  // gemini-3-pro-image-preview → Gemini Image
+  if (/image/i.test(name))  return 'Gemini Image'
+  // gemini-2.5-pro → Gemini 2.5 Pro
+  const m = name.match(/gemini[- ]?([\d.]+[^\s]*)/i)
+  return m ? `Gemini ${m[1]}` : name
 }
 
 function Stat({ value, label, color }) {

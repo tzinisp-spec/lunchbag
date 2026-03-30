@@ -71,26 +71,56 @@ def _parse_sprint_report(path: Path) -> dict:
     """Parse a markdown sprint report into a structured dict."""
     try:
         text = path.read_text()
-        r = {}
+        r: dict = {}
 
-        r["runtime"]     = _parse_table_value(text, "Total runtime")
-        r["approved"]    = _parse_table_value(text, "Images approved")
-        r["generated"]   = _parse_table_value(text, "Images generated")
-        r["pass_rate"]   = _parse_table_value(text, "First-pass approval rate")
+        # ── Summary ──────────────────────────────────────────
+        r["runtime"]      = _parse_table_value(text, "Total runtime")
+        r["pass_rate"]    = _parse_table_value(text, "First-pass approval rate")
         r["needs_review"] = _parse_table_value(text, "Needs manual review")
-        r["errors"]      = _parse_table_value(text, "Errors") or "0"
+        r["errors"]       = _parse_table_value(text, "Errors") or "0"
 
-        # Cost + total calls from summary table
+        # ── Step timings ─────────────────────────────────────
+        r["time_brief"]       = _parse_table_value(text, "Creative Brief")
+        r["time_style_bible"] = _parse_table_value(text, "Style Bible + Shot List")
+        r["time_generation"]  = _parse_table_value(text, "Image Generation")
+        r["time_photo_editor"]= _parse_table_value(text, "Photo Editor Review")
+
+        # ── Error / fix breakdown ────────────────────────────
+        r["errors_fixed"]   = _parse_table_value(text, "Fixed by editing") or "0"
+        r["errors_flagged"] = _parse_table_value(text, "Flagged for manual review") or "0"
+        try:
+            r["errors_total"] = int(r["errors_fixed"]) + int(r["errors_flagged"])
+        except ValueError:
+            r["errors_total"] = 0
+
+        # ── Per-model API calls & cost ────────────────────────
+        def _model_row(label):
+            m = re.search(
+                rf'\|\s*{re.escape(label)}\s*\|\s*\*{{0,2}}(\d+)\*{{0,2}}\s*\|\s*\*{{0,2}}\$?([\d.]+)\*{{0,2}}',
+                text
+            )
+            return (int(m.group(1)), float(m.group(2))) if m else (0, 0.0)
+
+        img_calls, img_cost = _model_row("Image generation model")
+        txt_calls, txt_cost = _model_row("Text/vision model")
+        r["calls_image_model"] = img_calls
+        r["cost_image_model"]  = img_cost
+        r["calls_text_model"]  = txt_calls
+        r["cost_text_model"]   = txt_cost
+
+        # Model names from section headers
+        m = re.search(r'###\s*(gemini[^\n]*image[^\n]*)', text, re.IGNORECASE)
+        r["image_model_name"] = m.group(1).strip() if m else "Image model"
+        m = re.search(r'###\s*(gemini-2\.[^\n]+)', text, re.IGNORECASE)
+        r["text_model_name"]  = m.group(1).strip() if m else "Text model"
+
+        # ── Totals ───────────────────────────────────────────
         m = re.search(
             r'\*\*Total\*\*\s*\|\s*\*\*(\d+)\*\*\s*\|\s*\*\*\$?([\d.]+)\*\*',
             text
         )
-        if m:
-            r["total_calls"] = int(m.group(1))
-            r["total_cost"]  = float(m.group(2))
-        else:
-            r["total_calls"] = 0
-            r["total_cost"]  = 0.0
+        r["total_calls"] = int(m.group(1))  if m else img_calls + txt_calls
+        r["total_cost"]  = float(m.group(2)) if m else round(img_cost + txt_cost, 2)
 
         return r
     except Exception:
@@ -163,11 +193,27 @@ def _load_shoot(month_dir: Path, shoot_dir: Path) -> dict:
         "regen":        regen,
         "status":       status,
         "sprint_id":    sprint_id or "UNKNOWN",
-        "runtime":      report.get("runtime", "—"),
-        "pass_rate":    report.get("pass_rate", "—"),
-        "total_calls":  report.get("total_calls", 0),
-        "total_cost":   report.get("total_cost", 0.0),
-        "errors":       report.get("errors", "0"),
+        "runtime":           report.get("runtime", "—"),
+        "pass_rate":         report.get("pass_rate", "—"),
+        "total_calls":       report.get("total_calls", 0),
+        "total_cost":        report.get("total_cost", 0.0),
+        "errors":            report.get("errors", "0"),
+        # Step timings
+        "time_brief":        report.get("time_brief"),
+        "time_style_bible":  report.get("time_style_bible"),
+        "time_generation":   report.get("time_generation"),
+        "time_photo_editor": report.get("time_photo_editor"),
+        # Error breakdown
+        "errors_fixed":      report.get("errors_fixed", "0"),
+        "errors_flagged":    report.get("errors_flagged", "0"),
+        "errors_total":      report.get("errors_total", 0),
+        # Per-model API
+        "calls_image_model": report.get("calls_image_model", 0),
+        "cost_image_model":  report.get("cost_image_model", 0.0),
+        "calls_text_model":  report.get("calls_text_model", 0),
+        "cost_text_model":   report.get("cost_text_model", 0.0),
+        "image_model_name":  report.get("image_model_name", "Image model"),
+        "text_model_name":   report.get("text_model_name", "Text model"),
     }
 
 
