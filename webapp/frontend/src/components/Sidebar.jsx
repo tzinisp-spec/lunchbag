@@ -5,12 +5,12 @@ import {
 } from 'lucide-react'
 
 const AGENTS = [
-  { id: 'orchestrator', name: 'Orchestrator' },
+  { id: 'orchestrator', name: 'Content Orchestrator' },
   { id: 'trend_scout',  name: 'Trend Scout' },
   { id: 'strategist',   name: 'Content Strategist' },
   { id: 'director',     name: 'Visual Director' },
   { id: 'photographer', name: 'Photographer' },
-  { id: 'qc',           name: 'QC Inspector' },
+  { id: 'photo_editor', name: 'Photo Editor' },
 ]
 
 const navBase   = 'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors'

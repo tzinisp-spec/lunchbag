@@ -19,12 +19,42 @@ REPORTS_DIR  = ROOT / "outputs" / "sprint_reports"
 OUTPUTS_DIR  = ROOT / "outputs"
 
 AGENTS = [
-    {"id": "orchestrator",  "name": "Content Orchestrator", "role": "Coordinates the full sprint"},
-    {"id": "trend_scout",   "name": "Trend Scout",          "role": "Instagram trend research"},
-    {"id": "strategist",    "name": "Content Strategist",   "role": "Creative brief & references"},
-    {"id": "director",      "name": "Visual Director",      "role": "Style Bible & Shot List"},
-    {"id": "photographer",  "name": "Photographer",         "role": "Image generation"},
-    {"id": "qc",            "name": "QC Inspector",         "role": "Photo editing & quality control"},
+    {
+        "id":   "orchestrator",
+        "name": "Content Orchestrator",
+        "role": "Coordinates the full sprint",
+        "description": "Senior creative operations manager. Briefs every agent, monitors progress, retries failures, and delivers the final image catalog to the brand owner. Nothing moves without its sign-off.",
+    },
+    {
+        "id":   "trend_scout",
+        "name": "Trend Scout",
+        "role": "Instagram trend research",
+        "description": "Tracks trending formats, hashtags, and competitor moves on Instagram every sprint. Scores each trend by relevance to the brand and flags urgent opportunities before the Strategist starts planning.",
+    },
+    {
+        "id":   "strategist",
+        "name": "Content Strategist",
+        "role": "Creative brief & visual world extraction",
+        "description": "Reads the reference images and campaign concept, then extracts the visual world precisely — setting, lighting, props, mood, and composition style. Produces a brief specific enough for the Director to execute without a follow-up question.",
+    },
+    {
+        "id":   "director",
+        "name": "Visual Director",
+        "role": "Style Bible & Shot List",
+        "description": "Designs 3 complete shoot sets that match the world of the reference images. Writes a DNA Prompt Block per set to lock the lighting and aesthetic, then writes a Shot List of 50 compositions — product variant, model presence, angle, and distance for every frame.",
+    },
+    {
+        "id":   "photographer",
+        "name": "Photographer",
+        "role": "Image generation",
+        "description": "Executes the full Shot List in one continuous run using multimodal prompts — product refs, style refs, and the DNA block for each set. Runs 3 concurrent workers for ~3× throughput. Hard constraints prevent structural errors from being generated.",
+    },
+    {
+        "id":   "photo_editor",
+        "name": "Photo Editor",
+        "role": "QC review, fixing & regen flagging",
+        "description": "Reviews every generated image against product references. Approves clean images, applies targeted fixes for minor issues, and flags structural failures (wrong strap, wrong model) for full regeneration. Saves a checkpoint after each image so a disconnection never loses progress.",
+    },
 ]
 
 
