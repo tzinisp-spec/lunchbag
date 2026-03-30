@@ -1,6 +1,6 @@
-# Lunchbag — AI Content Production System
+# Lunchbag — Agentic Content Production System
 
-An autonomous AI pipeline that runs a complete monthly Instagram content sprint for a product brand. Drop in reference images on Monday. Receive a fully shot, reviewed, captioned, and scheduled content library by end of day — no photographer, no copywriter, no content planner required.
+An autonomous agentic pipeline that runs a complete monthly Instagram content sprint for a product brand. Drop in reference images on Monday. Receive a fully shot, reviewed, captioned, and scheduled content library by end of day — no photographer, no copywriter, no content planner required.
 
 Built with CrewAI and Google Gemini. Designed for **The Lunchbags**, a Greek cotton lunch bag brand.
 
@@ -10,7 +10,7 @@ Built with CrewAI and Google Gemini. Designed for **The Lunchbags**, a Greek cot
 
 Most brand Instagram workflows look like this: brief a photographer → wait → review → reshoot → write captions → plan calendar → post. Each hand-off takes days.
 
-Lunchbag collapses that entire loop into a single command. A crew of specialized AI agents handles every step — from reading your moodboard to writing Greek captions — while a pipeline monitor tracks progress, retries failures, and hands you a sprint report at the end.
+Lunchbag collapses that entire loop into a single command. A crew of specialized agents handles every step — from reading your moodboard to writing Greek captions — while a pipeline monitor tracks progress, retries failures, and hands you a sprint report at the end.
 
 **One sprint produces:**
 - ~50 reviewed, QC-approved product images across 3 shoot sets
@@ -18,6 +18,51 @@ Lunchbag collapses that entire loop into a single command. A crew of specialized
 - Greek Instagram captions and hashtag sets for every image
 - A weekly posting calendar for the next 5 weeks
 - A sprint report with image counts, pass rates, and API cost breakdown
+
+---
+
+## Agent diagram
+
+```mermaid
+flowchart TD
+    Human(["🧑 Brand Owner\nreferences/ · concept.md · products/"])
+
+    subgraph Phase1["Phase 1 — Creative Planning"]
+        A1["🔍 Trend Scout\nResearches Instagram trends,\nscores by brand relevance"]
+        A2["📋 Content Strategist\nReads refs, extracts visual world,\nwrites creative brief"]
+        A3["🎨 Visual Director\nDesigns 3 shoot sets, writes Style Bible\nwith per-set DNA blocks + Shot List"]
+    end
+
+    subgraph Phase2["Phase 2 — Image Production"]
+        A4["📸 Image Generator\n50 shots · 3 parallel workers\nMultimodal prompts with product refs"]
+        A5["🎞 Film Processor\nFilm-style grading pass\nacross the full batch"]
+        A6["🔎 Photo Editor / QC\nReviews every frame\nPASS · FIX · REGEN · NEEDS REVIEW"]
+        A7["🔁 Auto-Regen Loop\nRebuilds structural failures\nwithout restarting the sprint"]
+    end
+
+    subgraph Phase3["Phase 3 — Content Packaging"]
+        A8["🗂 Catalog Writer\nStructured catalog.json\nfor every approved image"]
+        A9["✍️ Copywriter\nGreek captions + hashtags\nmatched to shot context"]
+        A10["📅 Content Planner\nWeekly posting calendar\nacross 5 posts/week cadence"]
+        A11["📊 Sprint Reporter\nImage counts · pass rates\ntiming · API cost"]
+    end
+
+    Deliver(["✅ Approved image library\nready to post"])
+
+    Human --> A1
+    A1 --> A2
+    A2 --> A3
+    A3 --> A4
+    A4 --> A5
+    A5 --> A6
+    A6 -- "Regen- files" --> A7
+    A7 --> A6
+    A6 -- "approved" --> A8
+    A8 --> A9
+    A9 --> A10
+    A10 --> A11
+    A11 --> Deliver
+```
 
 ---
 
