@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Bot } from 'lucide-react'
+import { Bot, ChevronRight } from 'lucide-react'
 import { api } from '../lib/api'
+import { AGENTS } from '../lib/agents'
 import StatCard from '../components/StatCard'
 import StatusBadge from '../components/StatusBadge'
 
@@ -66,15 +67,19 @@ export default function Dashboard() {
       <Section label="Agents">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {AGENTS.map(a => (
-            <div key={a.id} className="bg-gray-900 border border-gray-800 rounded-lg px-5 py-4 flex gap-4 hover:bg-gray-800/50 transition-colors">
-              <div className="w-9 h-9 rounded-full bg-gray-800 flex items-center justify-center shrink-0 mt-0.5">
-                <Bot size={16} className="text-gray-400" />
+            <div
+              key={a.id}
+              onClick={() => navigate(`/agents/${a.id}`)}
+              className="bg-gray-900 border border-gray-800 rounded-lg px-5 py-4 flex items-center gap-4 hover:bg-gray-800/50 transition-colors cursor-pointer group"
+            >
+              <div className="w-9 h-9 rounded-full bg-gray-800 flex items-center justify-center shrink-0 text-lg">
+                {a.icon}
               </div>
-              <div>
+              <div className="flex-1 min-w-0">
                 <div className="text-white text-sm font-medium">{a.name}</div>
-                <div className="text-gray-500 text-xs mb-2">{a.role}</div>
-                <div className="text-gray-600 text-xs leading-relaxed">{a.description}</div>
+                <div className="text-gray-500 text-xs truncate">{a.role}</div>
               </div>
+              <ChevronRight size={15} className="text-gray-700 group-hover:text-gray-400 transition-colors shrink-0" />
             </div>
           ))}
         </div>
@@ -136,41 +141,3 @@ function Empty({ text }) {
   return <div className="text-gray-600 text-sm py-4">{text}</div>
 }
 
-const AGENTS = [
-  {
-    id: 'orchestrator',
-    name: 'Content Orchestrator',
-    role: 'Coordinates the full sprint',
-    description: 'Briefs every agent, monitors progress, retries failures, and delivers the final image catalog to the brand owner. Nothing moves without its sign-off.',
-  },
-  {
-    id: 'trend_scout',
-    name: 'Trend Scout',
-    role: 'Instagram trend research',
-    description: 'Tracks trending formats, hashtags, and competitor moves every sprint. Scores each trend by relevance and flags urgent opportunities before planning starts.',
-  },
-  {
-    id: 'strategist',
-    name: 'Content Strategist',
-    role: 'Creative brief & visual world extraction',
-    description: 'Reads reference images and the campaign concept, extracts the visual world precisely — setting, lighting, props, and mood — then writes a brief the Director can execute without a follow-up.',
-  },
-  {
-    id: 'director',
-    name: 'Visual Director',
-    role: 'Style Bible & Shot List',
-    description: 'Designs 3 shoot sets matching the reference world. Writes a DNA Prompt Block per set to lock the aesthetic, then writes 50 shot compositions with exact product variant, model, angle, and distance.',
-  },
-  {
-    id: 'photographer',
-    name: 'Photographer',
-    role: 'Image generation',
-    description: 'Executes the full Shot List with multimodal prompts — product refs, style refs, and the DNA block per set. Runs 3 concurrent workers for ~3× throughput.',
-  },
-  {
-    id: 'photo_editor',
-    name: 'Photo Editor',
-    role: 'QC review, fixing & regen flagging',
-    description: 'Reviews every image against product references. Approves clean shots, fixes minor issues, and flags structural failures for full regeneration. Checkpoints after each image so disconnections never lose progress.',
-  },
-]

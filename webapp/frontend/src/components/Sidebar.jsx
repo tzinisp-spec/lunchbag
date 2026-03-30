@@ -83,13 +83,14 @@ export default function Sidebar() {
         </div>
 
         {AGENTS.map(agent => (
-          <div
+          <NavLink
             key={agent.id}
-            className="flex items-center gap-3 px-3 py-2 rounded-lg text-sm text-gray-400 hover:text-white hover:bg-gray-900 transition-colors cursor-default"
+            to={`/agents/${agent.id}`}
+            className={({ isActive }) => `${navBase} ${isActive ? navActive : navIdle}`}
           >
             <Users size={15} />
             <span className="flex-1 truncate">{agent.name}</span>
-          </div>
+          </NavLink>
         ))}
 
         {/* ── Company ── */}

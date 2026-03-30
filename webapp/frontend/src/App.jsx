@@ -5,6 +5,7 @@ import Photoshoots from './pages/Photoshoots'
 import ShootDetail from './pages/ShootDetail'
 import ContentPlanning from './pages/ContentPlanning'
 import PostScheduling from './pages/PostScheduling'
+import AgentDetail from './pages/AgentDetail'
 
 export default function App() {
   return (
@@ -16,6 +17,7 @@ export default function App() {
           <Route path="/photoshoots/:shootId"    element={<ShootDetail />} />
           <Route path="/content-planning"        element={<ContentPlanning />} />
           <Route path="/post-scheduling"         element={<PostScheduling />} />
+          <Route path="/agents/:agentId"         element={<AgentDetail />} />
           <Route path="*"                        element={<Navigate to="/" replace />} />
         </Routes>
       </Shell>
