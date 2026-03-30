@@ -219,6 +219,88 @@ def get_images_per_set(
     return base
 
 
+# ── Regen pass ───────────────────────────────────────────
+
+def _run_regen_pass(set_num: int) -> None:
+    """
+    After photo editor, find any Regen- files (structural
+    failures), regenerate those specific shots, run film
+    processing and QC on them, then update the catalog.
+    Limited to 1 regen round to avoid infinite loops.
+    """
+    shoot_folder = os.environ.get("SHOOT_FOLDER", "")
+    asset_dir = (
+        Path("asset_library/images")
+        / shoot_folder
+        / f"Set{set_num}"
+    )
+    regen_files = sorted([
+        f for f in asset_dir.iterdir()
+        if f.name.startswith("Regen-")
+    ])
+    if not regen_files:
+        return
+
+    print(
+        f"\n[Monitor] Found {len(regen_files)} structural "
+        f"failure(s) → auto-regenerating..."
+    )
+
+    # Extract shot codes from filenames
+    # e.g. Regen-lunchbag-SPRING-26-03-20-Shoot11-S1-006.png
+    shot_codes = []
+    clean_names = []
+    for f in regen_files:
+        m = re.search(r"-(S\d+-\d+)\.png$", f.name)
+        if m:
+            shot_codes.append(m.group(1))
+        clean = f.name[len("Regen-"):]
+        clean_names.append(clean)
+        f.rename(f.parent / clean)
+
+    if not shot_codes:
+        print("[Monitor] ⚠ Could not extract shot codes — skipping regen.")
+        return
+
+    print(f"[Monitor] Regenerating: {', '.join(shot_codes)}")
+
+    # Regenerate specific shots
+    os.environ["REGEN_SHOTS"] = ",".join(shot_codes)
+    ok, _ = _run_step_with_retry(
+        f"Set {set_num} — Regen Generation ({len(shot_codes)} shots)",
+        lambda: ImageGeneratorTool()._run(""),
+        lambda r: "successful" in r,
+    )
+    os.environ.pop("REGEN_SHOTS", None)
+
+    if not ok:
+        print("[Monitor] ⚠ Regen generation failed — skipping QC.")
+        return
+
+    # Film processing for regenerated shots only
+    _run_step_with_retry(
+        f"Set {set_num} — Regen Film Processing",
+        lambda: FilmProcessorTool()._run(""),
+        _check_film_processor,
+    )
+
+    # QC on regenerated shots only
+    os.environ["REGEN_FILES"] = ",".join(clean_names)
+    _run_step_with_retry(
+        f"Set {set_num} — Regen QC ({len(clean_names)} shots)",
+        lambda: PhotoEditorTool()._run(""),
+        _check_photo_editor,
+    )
+    os.environ.pop("REGEN_FILES", None)
+
+    # Update catalog with any newly approved shots
+    _run_step_with_retry(
+        f"Set {set_num} — Regen Catalog Update",
+        lambda: CatalogWriterTool()._run(""),
+        _check_catalog,
+    )
+
+
 # ── Set pipeline ─────────────────────────────────────────
 
 def run_set(set_num: int, images_this_set: int) -> dict:
@@ -231,7 +313,7 @@ def run_set(set_num: int, images_this_set: int) -> dict:
 
     # Step 1 — Image Generation
     t0 = time.time()
-    ok, result = _run_step_with_retry(
+    _run_step_with_retry(
         f"Set {set_num} — Image Generation",
         lambda: ImageGeneratorTool()._run(""),
         lambda r: _check_image_gen(r, images_this_set),
@@ -255,6 +337,9 @@ def run_set(set_num: int, images_this_set: int) -> dict:
         _check_photo_editor,
     )
     step_times["photo_editor"] = int(time.time() - t0)
+
+    # Step 3b — Auto-regen structural failures
+    _run_regen_pass(set_num)
 
     # Step 4 — Catalog
     t0 = time.time()

@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import base64
 import time
 from pathlib import Path
@@ -7,6 +8,34 @@ from datetime import datetime
 from crewai.tools import BaseTool
 from google import genai
 from google.genai import types
+
+CHECKPOINT_PATH = Path("outputs/photo_editor_checkpoint.json")
+
+
+def _save_checkpoint(
+    index: int,
+    anchor_file: str | None,
+    passed_first: int,
+    fixed: int,
+    flagged: int,
+    image_results: list,
+) -> None:
+    """Persist per-image progress so a retry can resume mid-set."""
+    try:
+        data = {
+            "shoot_folder":    os.getenv("SHOOT_FOLDER", ""),
+            "set":             int(os.getenv("CURRENT_SET", "0")),
+            "completed_index": index,
+            "anchor_image_file": anchor_file,
+            "passed_first":    passed_first,
+            "fixed":           fixed,
+            "flagged":         flagged,
+            "image_results":   image_results,
+        }
+        CHECKPOINT_PATH.parent.mkdir(parents=True, exist_ok=True)
+        CHECKPOINT_PATH.write_text(json.dumps(data))
+    except Exception:
+        pass  # Never let a checkpoint save crash the main loop
 
 # Issues that cannot be fixed by inpainting — they require a full
 # re-generation of the shot from scratch.
@@ -763,8 +792,6 @@ class PhotoEditorTool(BaseTool):
             technical_spec = _extract_technical_spec()
 
             # ── Load images to review ─────────────────────
-            # _get_asset_dir() already scopes to the current
-            # set's subfolder — no filename filtering needed.
             all_generated = sorted([
                 f for f in _get_asset_dir().iterdir()
                 if f.is_file()
@@ -775,12 +802,56 @@ class PhotoEditorTool(BaseTool):
             if not all_generated:
                 return "No generated images found to review."
 
+            # ── REGEN_FILES filter ────────────────────────
+            # When set, only review the specified filenames.
+            # Used by the auto-regen pass to avoid re-reviewing
+            # the full set after regenerating a few shots.
+            regen_files_env = os.getenv("REGEN_FILES", "")
+            if regen_files_env:
+                regen_set = set(regen_files_env.split(","))
+                all_generated = [
+                    f for f in all_generated
+                    if f.name in regen_set
+                ]
+                print(
+                    f"[PhotoEditor] Regen QC mode: "
+                    f"reviewing {len(all_generated)} "
+                    f"regenerated shot(s)"
+                )
+                if not all_generated:
+                    return "REGEN_QC_NOTHING: no matching files found."
+
+            # ── Auto-resume from checkpoint ───────────────
+            checkpoint_data = {}
+            if not regen_files_env and CHECKPOINT_PATH.exists():
+                try:
+                    checkpoint_data = json.loads(
+                        CHECKPOINT_PATH.read_text()
+                    )
+                    ckpt_folder = checkpoint_data.get("shoot_folder")
+                    ckpt_set    = checkpoint_data.get("set")
+                    curr_folder = os.getenv("SHOOT_FOLDER", "")
+                    curr_set    = int(os.getenv("CURRENT_SET", "0"))
+                    if (ckpt_folder == curr_folder
+                            and ckpt_set == curr_set):
+                        resume_idx = checkpoint_data.get(
+                            "completed_index", 0
+                        )
+                        print(
+                            f"[PhotoEditor] Resuming from "
+                            f"checkpoint at image "
+                            f"{resume_idx + 1}"
+                        )
+                    else:
+                        checkpoint_data = {}  # stale checkpoint
+                except Exception:
+                    checkpoint_data = {}
+
             # ── Load Art Director report for rework loop ──
             art_report_path = OUTPUTS_DIR / "art_director_latest.md"
             art_notes = {}
             if art_report_path.exists():
                 art_content = art_report_path.read_text()
-                # Simple extraction of: - Art Review-NAME -> NOTE
                 notes_match = re.findall(
                     r"- (Art Review-.*?)\n\s+→ (.*?)\n",
                     art_content
@@ -789,11 +860,22 @@ class PhotoEditorTool(BaseTool):
                     art_notes[name.strip()] = note.strip()
 
             total        = len(all_generated)
-            passed_first = 0
-            fixed        = 0
-            flagged      = 0
-            image_results = []
+            passed_first = checkpoint_data.get("passed_first", 0)
+            fixed        = checkpoint_data.get("fixed", 0)
+            flagged      = checkpoint_data.get("flagged", 0)
+            image_results = checkpoint_data.get("image_results", [])
             anchor_image  = None
+            anchor_image_name: str | None = checkpoint_data.get(
+                "anchor_image_file"
+            )
+
+            # Restore anchor image from checkpoint
+            if anchor_image_name:
+                anchor_path = _get_asset_dir() / anchor_image_name
+                if anchor_path.exists():
+                    anchor_image = (
+                        anchor_path.read_bytes(), "image/png"
+                    )
 
             for i, gen_file in enumerate(all_generated):
                 # ── Handle Art Review Rework ──────────────
@@ -834,14 +916,19 @@ class PhotoEditorTool(BaseTool):
 
                 if verdict == "PASS":
                     passed_first += 1
-                    # First passing image becomes anchor
                     if anchor_image is None:
                         anchor_image = (gen_bytes, "image/png")
+                        anchor_image_name = gen_file.name
                     image_results.append({
                         "file":    gen_file.name,
                         "status":  "PASS",
                         "review":  review_text,
                     })
+                    _save_checkpoint(
+                        i, anchor_image_name,
+                        passed_first, fixed, flagged,
+                        image_results,
+                    )
                     print(f"[PhotoEditor] ✓ PASS")
                     continue
 
@@ -876,6 +963,11 @@ class PhotoEditorTool(BaseTool):
                         "fix":      fix_instruction,
                         "attempts": 0,
                     })
+                    _save_checkpoint(
+                        i, anchor_image_name,
+                        passed_first, fixed, flagged,
+                        image_results,
+                    )
                     continue
 
                 best_bytes      = None
@@ -977,6 +1069,7 @@ class PhotoEditorTool(BaseTool):
 
                     if anchor_image is None:
                         anchor_image = (best_bytes, "image/png")
+                        anchor_image_name = final_name
                     fixed += 1
                     print(f"[PhotoEditor] ✓ Saved fixed image as {final_name}")
                     image_results.append({
@@ -987,6 +1080,11 @@ class PhotoEditorTool(BaseTool):
                         "fix_review": last_fix_review,
                         "attempts":   attempt,
                     })
+                    _save_checkpoint(
+                        i, anchor_image_name,
+                        passed_first, fixed, flagged,
+                        image_results,
+                    )
                     continue
 
                 # ── All 3 attempts failed ─────────────────
@@ -1013,6 +1111,11 @@ class PhotoEditorTool(BaseTool):
                     "fix":      fix_instruction,
                     "attempts": 3,
                 })
+                _save_checkpoint(
+                    i, anchor_image_name,
+                    passed_first, fixed, flagged,
+                    image_results,
+                )
 
             # ── Second pass batch consistency check ───
             print(
@@ -1171,6 +1274,13 @@ class PhotoEditorTool(BaseTool):
                 "outputs/photo_editor_latest.md"
             )
             latest.write_text(report)
+
+            # Clear checkpoint — set completed cleanly
+            if CHECKPOINT_PATH.exists():
+                try:
+                    CHECKPOINT_PATH.unlink()
+                except Exception:
+                    pass
 
             return report
 
