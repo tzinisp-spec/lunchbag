@@ -1,13 +1,16 @@
 const BASE = '/api'
 
+const FETCH_OPTS = { credentials: 'include' }
+
 async function get(path) {
-  const res = await fetch(`${BASE}${path}`)
+  const res = await fetch(`${BASE}${path}`, FETCH_OPTS)
   if (!res.ok) throw new Error(`API error ${res.status}: ${path}`)
   return res.json()
 }
 
 async function post(path, body) {
   const res = await fetch(`${BASE}${path}`, {
+    ...FETCH_OPTS,
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -18,6 +21,7 @@ async function post(path, body) {
 
 async function del(path, body) {
   const res = await fetch(`${BASE}${path}`, {
+    ...FETCH_OPTS,
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -28,6 +32,7 @@ async function del(path, body) {
 
 async function patch(path, body) {
   const res = await fetch(`${BASE}${path}`, {
+    ...FETCH_OPTS,
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -37,12 +42,17 @@ async function patch(path, body) {
 }
 
 async function upload(path, formData) {
-  const res = await fetch(`${BASE}${path}`, { method: 'POST', body: formData })
+  const res = await fetch(`${BASE}${path}`, { ...FETCH_OPTS, method: 'POST', body: formData })
   if (!res.ok) throw new Error(`API error ${res.status}: ${path}`)
   return res.json()
 }
 
 export const api = {
+  // Auth
+  authMe:         ()                    => get('/auth/me'),
+  authLogin:      (username, password)  => post('/auth/login', { username, password }),
+  authLogout:     ()                    => post('/auth/logout', {}),
+
   search:         (q)                   => get(`/search?q=${encodeURIComponent(q)}`),
   dashboard:      ()                    => get('/dashboard'),
   shoots:         ()                    => get('/shoots'),

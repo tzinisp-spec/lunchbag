@@ -4,16 +4,80 @@ Serves data from the pipeline's output files.
 """
 
 import json
+import os
 import queue
 import re
+from functools import wraps
+from dotenv import load_dotenv
+
+load_dotenv()
 from pathlib import Path
 from datetime import datetime
-from flask import Flask, jsonify, send_file, request, abort, Response, stream_with_context
+from flask import Flask, jsonify, send_file, request, abort, Response, stream_with_context, session
 from flask_cors import CORS
 from process_manager import process_manager, process_manager_p2
 
 app = Flask(__name__)
-CORS(app)
+CORS(app, supports_credentials=True)
+
+# ── Auth config ───────────────────────────────────────────────────────────────
+# Set SECRET_KEY, ADMIN_USER, ADMIN_PASS, CLIENT_USER, CLIENT_PASS in env.
+app.secret_key = os.getenv('SECRET_KEY', 'dev-secret-change-in-production')
+
+_CREDENTIALS = {
+    os.getenv('ADMIN_USER',  'admin'):  {'password': os.getenv('ADMIN_PASS',  'admin'),  'role': 'admin'},
+    os.getenv('CLIENT_USER', 'client'): {'password': os.getenv('CLIENT_PASS', 'client'), 'role': 'client'},
+}
+
+# Routes the client role is NOT allowed to call
+_CLIENT_BLOCKED = (
+    '/api/dashboard', '/api/activity', '/api/logs',
+    '/api/run',       '/api/p2',       '/api/agents',
+    '/api/photoshoot-report', '/api/content-plan-report',
+    '/api/brand',     '/api/concept',  '/api/products',
+    '/api/org',
+)
+
+@app.before_request
+def _check_auth():
+    # Auth endpoints and image proxy are always public
+    if request.path.startswith('/api/auth/') or request.path == '/api/image':
+        return None
+    if not request.path.startswith('/api/'):
+        return None
+    # Must be logged in for all other API routes
+    if 'role' not in session:
+        return jsonify({'error': 'Unauthorized'}), 401
+    # Client role: block admin-only prefixes
+    if session['role'] == 'client':
+        for prefix in _CLIENT_BLOCKED:
+            if request.path.startswith(prefix):
+                return jsonify({'error': 'Forbidden'}), 403
+
+# ── Auth endpoints ────────────────────────────────────────────────────────────
+
+@app.route('/api/auth/login', methods=['POST'])
+def auth_login():
+    data     = request.get_json() or {}
+    username = data.get('username', '').strip()
+    password = data.get('password', '')
+    user     = _CREDENTIALS.get(username)
+    if not user or user['password'] != password:
+        return jsonify({'error': 'Invalid credentials'}), 401
+    session['user'] = username
+    session['role'] = user['role']
+    return jsonify({'user': username, 'role': user['role']})
+
+@app.route('/api/auth/me')
+def auth_me():
+    if 'user' not in session:
+        return jsonify({'user': None, 'role': None})
+    return jsonify({'user': session['user'], 'role': session['role']})
+
+@app.route('/api/auth/logout', methods=['POST'])
+def auth_logout():
+    session.clear()
+    return jsonify({'ok': True})
 
 ROOT         = Path(__file__).parent.parent
 ASSET_DIR    = ROOT / "asset_library" / "images"

@@ -5,6 +5,7 @@ import Sidebar from './Sidebar'
 import SearchModal from './SearchModal'
 import { useTheme } from '../lib/theme'
 import { useToast } from '../lib/toast'
+import { useAuth } from '../lib/auth'
 import { api } from '../lib/api'
 
 // ── Run lifecycle monitor ─────────────────────────────────────────────────────
@@ -74,6 +75,7 @@ export default function Shell({ children }) {
   const [appStatus,    setAppStatus]    = useState(null)
   const [searchOpen,   setSearchOpen]   = useState(false)
   const { theme, toggle } = useTheme()
+  const { auth } = useAuth()
   const location = useLocation()
 
   useEffect(() => { setDrawerOpen(false) }, [location.pathname])
@@ -138,7 +140,7 @@ export default function Shell({ children }) {
         collapsed ? 'md:w-0' : 'md:w-64',
         'overflow-hidden w-64',
       ].join(' ')}>
-        <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} onClose={() => setDrawerOpen(false)} appStatus={appStatus} onSearch={() => setSearchOpen(true)} />
+        <Sidebar collapsed={collapsed} onToggle={toggleCollapsed} onClose={() => setDrawerOpen(false)} appStatus={appStatus} onSearch={() => setSearchOpen(true)} role={auth?.role} />
       </div>
 
       {/* Main content */}

@@ -1,20 +1,29 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Camera, Calendar, CalendarDays,
-  Bot, Search, Building2, PanelLeftClose, PanelLeftOpen, X, Terminal, Wand2,
+  Bot, Search, Building2, PanelLeftClose, PanelLeftOpen, X, Terminal, Wand2, LogOut,
 } from 'lucide-react'
 import { AGENTS } from '../lib/agents'
+import { useAuth } from '../lib/auth'
 
 const navBase   = 'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors'
 const navActive = `bg-[var(--c-nav-active-bg)] text-[var(--c-nav-active-text)]`
 const navIdle   = `text-[var(--c-text-2)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-surface-2)]`
 
-export default function Sidebar({ collapsed, onToggle, onClose, appStatus, onSearch }) {
+export default function Sidebar({ collapsed, onToggle, onClose, appStatus, onSearch, role }) {
   const isLive      = appStatus?.is_live        ?? false
   const p1Live      = appStatus?.p1_live        ?? false
   const p2Live      = appStatus?.p2_live        ?? false
   const needsReview = appStatus?.needs_review   ?? 0
   const hasErrors   = appStatus?.has_log_errors ?? false
+  const isAdmin     = role === 'admin'
+  const { logout }  = useAuth()
+  const navigate    = useNavigate()
+
+  async function handleLogout() {
+    await logout()
+    navigate('/login', { replace: true })
+  }
 
   return (
     <div className="w-64 bg-[var(--c-sidebar)] border-r border-[var(--c-border)] flex flex-col h-full shrink-0">
@@ -52,41 +61,47 @@ export default function Sidebar({ collapsed, onToggle, onClose, appStatus, onSea
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto px-3 py-3 space-y-1">
 
-        <NavLink to="/" end className={({ isActive }) => `${navBase} ${isActive ? navActive : navIdle}`}>
-          <LayoutDashboard size={16} />
-          <span className="flex-1">Dashboard</span>
-          {isLive && <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" title="Pipeline running" />}
-        </NavLink>
+        {isAdmin && (
+          <NavLink to="/" end className={({ isActive }) => `${navBase} ${isActive ? navActive : navIdle}`}>
+            <LayoutDashboard size={16} />
+            <span className="flex-1">Dashboard</span>
+            {isLive && <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" title="Pipeline running" />}
+          </NavLink>
+        )}
 
-        <NavLink
-          to="/run"
-          className={({ isActive }) =>
-            `flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors mt-1 ${
-              isActive
-                ? 'bg-green-600 text-white'
-                : 'bg-green-600/15 text-green-400 border border-green-500/30 hover:bg-green-600/25'
-            }`
-          }
-        >
-          <Camera size={14} />
-          <span className="flex-1">New Shoot</span>
-          {p1Live && <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" />}
-        </NavLink>
+        {isAdmin && (
+          <NavLink
+            to="/run"
+            className={({ isActive }) =>
+              `flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors mt-1 ${
+                isActive
+                  ? 'bg-green-600 text-white'
+                  : 'bg-green-600/15 text-green-400 border border-green-500/30 hover:bg-green-600/25'
+              }`
+            }
+          >
+            <Camera size={14} />
+            <span className="flex-1">New Shoot</span>
+            {p1Live && <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" />}
+          </NavLink>
+        )}
 
-        <NavLink
-          to="/content-pipeline"
-          className={({ isActive }) =>
-            `flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors mt-1 mb-1 ${
-              isActive
-                ? 'bg-blue-600 text-white'
-                : 'bg-blue-600/15 text-blue-400 border border-blue-500/30 hover:bg-blue-600/25'
-            }`
-          }
-        >
-          <Wand2 size={14} />
-          <span className="flex-1">New Content Planning</span>
-          {p2Live && <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shrink-0" />}
-        </NavLink>
+        {isAdmin && (
+          <NavLink
+            to="/content-pipeline"
+            className={({ isActive }) =>
+              `flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors mt-1 mb-1 ${
+                isActive
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-blue-600/15 text-blue-400 border border-blue-500/30 hover:bg-blue-600/25'
+              }`
+            }
+          >
+            <Wand2 size={14} />
+            <span className="flex-1">New Content Planning</span>
+            {p2Live && <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shrink-0" />}
+          </NavLink>
+        )}
 
         <div className="pt-4 pb-1 px-3">
           <span className="text-xs text-[var(--c-text-3)] uppercase tracking-wider">Workflow</span>
@@ -115,38 +130,52 @@ export default function Sidebar({ collapsed, onToggle, onClose, appStatus, onSea
           <span className="flex-1">Auto Scheduling</span>
         </NavLink>
 
-        <NavLink to="/logs" className={({ isActive }) => `${navBase} ${isActive ? navActive : navIdle}`}>
-          <Terminal size={15} />
-          <span className="flex-1">Run Log</span>
-          {hasErrors && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" title="Errors in log" />}
-        </NavLink>
-
-        <div className="pt-4 pb-1 px-3">
-          <span className="text-xs text-[var(--c-text-3)] uppercase tracking-wider">Agents</span>
-        </div>
-
-        {AGENTS.map(agent => (
-          <NavLink key={agent.id} to={`/agents/${agent.id}`} className={({ isActive }) => `${navBase} ${isActive ? navActive : navIdle}`}>
-            <Bot size={15} />
-            <span className="flex-1 truncate">{agent.name}</span>
+        {isAdmin && (
+          <NavLink to="/logs" className={({ isActive }) => `${navBase} ${isActive ? navActive : navIdle}`}>
+            <Terminal size={15} />
+            <span className="flex-1">Run Log</span>
+            {hasErrors && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" title="Errors in log" />}
           </NavLink>
-        ))}
+        )}
 
-        <div className="pt-4 pb-1 px-3">
-          <span className="text-xs text-[var(--c-text-3)] uppercase tracking-wider">Brand</span>
-        </div>
+        {isAdmin && (
+          <>
+            <div className="pt-4 pb-1 px-3">
+              <span className="text-xs text-[var(--c-text-3)] uppercase tracking-wider">Agents</span>
+            </div>
+            {AGENTS.map(agent => (
+              <NavLink key={agent.id} to={`/agents/${agent.id}`} className={({ isActive }) => `${navBase} ${isActive ? navActive : navIdle}`}>
+                <Bot size={15} />
+                <span className="flex-1 truncate">{agent.name}</span>
+              </NavLink>
+            ))}
 
-        <NavLink to="/org" className={({ isActive }) => `${navBase} ${isActive ? navActive : navIdle}`}>
-          <Building2 size={15} />
-          <span>The Lunch Bags</span>
-        </NavLink>
+            <div className="pt-4 pb-1 px-3">
+              <span className="text-xs text-[var(--c-text-3)] uppercase tracking-wider">Brand</span>
+            </div>
+            <NavLink to="/org" className={({ isActive }) => `${navBase} ${isActive ? navActive : navIdle}`}>
+              <Building2 size={15} />
+              <span>The Lunch Bags</span>
+            </NavLink>
+          </>
+        )}
 
       </nav>
 
-      <div className="border-t border-[var(--c-border)] px-4 py-3">
-        <span className="text-xs text-[var(--c-text-3)] hover:text-[var(--c-text-2)] cursor-pointer transition-colors">
-          Documentation
-        </span>
+      <div className="border-t border-[var(--c-border)] px-4 py-3 flex items-center justify-between">
+        {isAdmin && (
+          <span className="text-xs text-[var(--c-text-3)] hover:text-[var(--c-text-2)] cursor-pointer transition-colors">
+            Documentation
+          </span>
+        )}
+        <button
+          onClick={handleLogout}
+          className="flex items-center gap-1.5 text-xs text-[var(--c-text-3)] hover:text-red-400 transition-colors ml-auto"
+          title="Sign out"
+        >
+          <LogOut size={13} />
+          <span>Sign out</span>
+        </button>
       </div>
 
     </div>
