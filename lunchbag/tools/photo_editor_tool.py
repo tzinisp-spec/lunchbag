@@ -3,13 +3,33 @@ import re
 import json
 import base64
 import time
+import threading
 from pathlib import Path
 from datetime import datetime
 from crewai.tools import BaseTool
 from google import genai
 from google.genai import types
 
-CHECKPOINT_PATH = Path("outputs/photo_editor_checkpoint.json")
+CHECKPOINT_PATH   = Path("outputs/photo_editor_checkpoint.json")
+_API_COUNTER_PATH = Path("outputs/api_counters.json")
+_API_FILE_LOCK    = threading.Lock()
+
+
+def _track_api_call(category: str, count: int = 1) -> None:
+    """Atomically increment an API call counter in api_counters.json."""
+    with _API_FILE_LOCK:
+        try:
+            data = {}
+            if _API_COUNTER_PATH.exists():
+                try:
+                    data = json.loads(_API_COUNTER_PATH.read_text())
+                except Exception:
+                    pass
+            data[category] = data.get(category, 0) + count
+            _API_COUNTER_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _API_COUNTER_PATH.write_text(json.dumps(data, indent=2))
+        except Exception:
+            pass  # Never let counter errors break the pipeline
 
 
 def _save_checkpoint(
@@ -245,18 +265,30 @@ def _review_image(
         "Review the LAST IMAGE against these "
         "8 criteria:\n\n"
         "1. PATTERN ACCURACY\n"
-        "Does the print pattern on the bag match "
-        "the product reference? Check motifs, "
-        "colours, and overall design. "
-        "Allow for natural variation caused by "
-        "lighting, angle, and fabric drape — "
-        "a pattern that appears slightly darker "
-        "or lighter due to shadows is acceptable. "
-        "Fail only if: the pattern design is "
-        "fundamentally different, wrong motifs, "
-        "completely wrong colours, or the pattern "
-        "appears to be a different product entirely. "
-        "Lighting variation on same pattern = pass.\n\n"
+        "STEP 1 — IDENTIFY: Before judging, state "
+        "explicitly which product reference the bag "
+        "in the image matches (e.g. 'matches ref 2: "
+        "leopard print'). If it does not clearly "
+        "match any reference, state that. "
+        "Each product reference is a distinct SKU — "
+        "a leopard print and an abstract print are "
+        "DIFFERENT PRODUCTS even if they look vaguely "
+        "similar. Do not assume they are close enough.\n"
+        "STEP 2 — VERIFY: Compare motifs, dominant "
+        "colours, and pattern structure against the "
+        "identified reference exactly. "
+        "Only acceptable variation: same pattern "
+        "appearing slightly darker or lighter due "
+        "to lighting or fabric drape — same motifs, "
+        "same colour family, same structure. "
+        "FAIL immediately if: wrong motif type "
+        "(e.g. geometric vs organic), wrong dominant "
+        "colour, wrong pattern scale, or mixed "
+        "elements from different products. "
+        "If the bag does not clearly match ANY "
+        "of the references, FAIL. "
+        "When in doubt, FAIL — a wrong product "
+        "in the catalog is worse than a re-shoot.\n\n"
         "2. FABRIC QUALITY\n"
         "Does the bag surface look like real "
         "woven cotton? It MUST have visible "
@@ -428,9 +460,10 @@ def _review_image(
             types.Content(role="user", parts=parts_list)
         ],
     )
+    _track_api_call("review_calls")
 
     review_text = response.text.strip()
-    
+
     # Criterion 9 is a hard veto
     if "9. COMPOSITION REALITY CHECK" in review_text:
         crit9_section = review_text.split(
@@ -515,6 +548,7 @@ def _fix_image(
                 ),
             ),
         )
+        _track_api_call("fix_calls")
 
         for part in response.candidates[0].content.parts:
             if part.inline_data is not None:
@@ -613,12 +647,16 @@ def _batch_consistency_check(
                 f"{technical_spec}\n\n"
                 "Check for these batch-level issues:\n\n"
                 "1. PRODUCT CONSISTENCY\n"
-                "Each photoshoot image features ONE of the "
-                "product references. Does the bag in every "
-                "image match one of the references in "
-                "pattern, shape, and colour? Flag any "
-                "image where the bag does not match ANY "
-                "of the references.\n\n"
+                "For each image, identify which specific "
+                "product reference the bag matches (name "
+                "it: e.g. 'ref 2: leopard print'). "
+                "Each product is a distinct SKU — similar "
+                "does not mean the same. Flag any image "
+                "where: (a) the bag does not clearly match "
+                "ANY reference, or (b) the pattern motif, "
+                "dominant colour, or structure differs from "
+                "all references. Similar-but-wrong counts "
+                "as wrong — when in doubt, flag it.\n\n"
                 "2. MODEL CONSISTENCY\n"
                 "If a model appears across multiple images, "
                 "does she look like the same person? "
@@ -676,6 +714,7 @@ def _batch_consistency_check(
                     )
                 ],
             )
+            _track_api_call("batch_check_calls")
 
             result_text = response.text.strip()
 

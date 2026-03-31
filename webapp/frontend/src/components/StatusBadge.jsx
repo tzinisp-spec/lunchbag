@@ -1,11 +1,11 @@
 const STYLES = {
   complete:     'text-green-500',
   in_progress:  'text-blue-500',
-  empty:        'text-gray-500',
+  empty:        'text-[var(--c-text-3)]',
   approved:     'text-green-500',
   needs_review: 'text-orange-400',
   regen:        'text-red-400',
-  pending:      'text-gray-400',
+  pending:      'text-[var(--c-text-2)]',
 }
 
 const LABELS = {
@@ -25,7 +25,7 @@ const DOTS = {
 }
 
 export default function StatusBadge({ status, dot = false }) {
-  const cls = STYLES[status] ?? 'text-gray-400'
+  const cls = STYLES[status] ?? 'text-[var(--c-text-2)]'
   const label = LABELS[status] ?? status
   return (
     <span className={`flex items-center gap-1.5 text-sm font-medium ${cls}`}>

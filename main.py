@@ -3,6 +3,7 @@ import re
 import sys
 import json
 import time
+import threading
 import calendar as cal_module
 from pathlib import Path
 from datetime import date, datetime
@@ -14,6 +15,9 @@ from lunchbag.tools.film_processor_tool import FilmProcessorTool
 from lunchbag.tools.photo_editor_tool import PhotoEditorTool
 from lunchbag.tools.catalog_writer_tool import CatalogWriterTool
 from lunchbag.tools.sprint_reporter_tool import SprintReporterTool
+from lunchbag.tools.progress_tracker import ProgressTracker
+from lunchbag.tools.run_logger import RunLogger
+from lunchbag.tools.catalog_utils import CatalogSyncWatcher
 
 load_dotenv()
 
@@ -21,6 +25,19 @@ TOTAL_SETS = 3
 IMAGE_DISTRIBUTION = {1: 17, 2: 17, 3: 16}
 MAX_STEP_ATTEMPTS  = 3
 RETRY_DELAY        = 10   # seconds between step retries
+
+# Milestones in run order — passed to ProgressTracker.start_run()
+PHASE1_MILESTONES = [
+    {"id": "creative_brief",      "label": "Creative Brief",             "agent": "strategist"},
+    {"id": "style_bible",         "label": "Style Bible + Shot List",    "agent": "director"},
+    {"id": "image_gen_set_1",     "label": "Image Generation — Set 1",   "agent": "photographer"},
+    {"id": "photo_editor_set_1",  "label": "Photo Editor Review — Set 1","agent": "photo_editor"},
+    {"id": "image_gen_set_2",     "label": "Image Generation — Set 2",   "agent": "photographer"},
+    {"id": "photo_editor_set_2",  "label": "Photo Editor Review — Set 2","agent": "photo_editor"},
+    {"id": "image_gen_set_3",     "label": "Image Generation — Set 3",   "agent": "photographer"},
+    {"id": "photo_editor_set_3",  "label": "Photo Editor Review — Set 3","agent": "photo_editor"},
+    {"id": "sprint_report",       "label": "Sprint Report",              "agent": "orchestrator"},
+]
 
 INPUTS = {
     "brand_name":        "The Lunchbags",
@@ -60,11 +77,25 @@ def _is_fatal_error(result: str) -> bool:
     return "FATAL_ERROR:" in result
 
 
+def _error_snippet(result: str) -> str:
+    """Extract a short readable error from a result string."""
+    for prefix in ("EXCEPTION: ", "FATAL_ERROR: "):
+        if result.startswith(prefix):
+            return result[len(prefix):][:100]
+    if "503" in result:
+        return "503 service unavailable"
+    if "quota" in result.lower():
+        return "API quota exceeded"
+    return result[:100] if result else "unknown error"
+
+
 def _run_step_with_retry(
     step_name: str,
     step_fn,
     success_check,
     max_attempts: int = MAX_STEP_ATTEMPTS,
+    tracker: ProgressTracker = None,
+    mid: str = None,
 ) -> tuple[bool, str]:
     """
     Run a pipeline step with automatic retry.
@@ -73,6 +104,7 @@ def _run_step_with_retry(
     - Hard-stops immediately on fatal errors (code bugs,
       missing attributes, bad imports) that will never
       resolve on retry.
+    - Optionally updates a ProgressTracker milestone.
     - Returns (success, last_result).
     """
     last_result = ""
@@ -81,6 +113,9 @@ def _run_step_with_retry(
             f"\n[Monitor] ── {step_name} "
             f"(attempt {attempt}/{max_attempts}) ──"
         )
+        if tracker and mid:
+            tracker.milestone_start(mid, attempt)
+
         try:
             last_result = step_fn()
         except FATAL_EXCEPTION_TYPES as e:
@@ -96,6 +131,9 @@ def _run_step_with_retry(
                 f"  Pipeline stopped. "
                 f"Resume tomorrow.\n"
             )
+            if tracker and mid:
+                tracker.milestone_fail(mid, "Daily API quota exhausted", final=True)
+                tracker.finish_run("failed")
             sys.exit(1)
 
         if _is_fatal_error(last_result):
@@ -104,16 +142,25 @@ def _run_step_with_retry(
                 f"  Fix the underlying issue and re-run.\n"
                 f"  {last_result}\n"
             )
+            if tracker and mid:
+                tracker.milestone_fail(mid, _error_snippet(last_result), final=True)
+                tracker.finish_run("failed")
             sys.exit(1)
 
         if success_check(last_result):
             print(f"[Monitor] ✓ {step_name} — OK")
+            if tracker and mid:
+                tracker.milestone_done(mid)
             return True, last_result
 
         print(
             f"[Monitor] ✗ {step_name} failed "
             f"(attempt {attempt}/{max_attempts})"
         )
+        if tracker and mid:
+            is_final = (attempt == max_attempts)
+            tracker.milestone_fail(mid, _error_snippet(last_result), final=is_final)
+
         if attempt < max_attempts:
             print(
                 f"[Monitor] Retrying in {RETRY_DELAY}s..."
@@ -173,6 +220,64 @@ def _check_photo_editor(result: str) -> bool:
 def _check_catalog(result: str) -> bool:
     """Catalog written successfully."""
     return "SUCCESS" in result
+
+
+# ── Crew file watcher ────────────────────────────────────
+
+def _watch_crew_files(
+    tracker: ProgressTracker,
+    run_start: float,
+    stop: threading.Event,
+) -> None:
+    """
+    Background thread.
+    Polls for creative_brief.md and style_bible_and_shot_list.md.
+    When each appears (with mtime > run_start) it advances the
+    corresponding milestone, giving live sub-task visibility
+    inside the crew's otherwise opaque run.
+    """
+    brief_path = Path("outputs/creative_brief.md")
+    bible_path = Path("outputs/style_bible_and_shot_list.md")
+    brief_seen = 0.0
+    bible_seen = 0.0
+
+    while not stop.is_set():
+        try:
+            bm = brief_path.stat().st_mtime if brief_path.exists() else 0
+            if bm > run_start and bm > brief_seen:
+                brief_seen = bm
+                m = tracker.get_milestone("creative_brief")
+                if m and m["status"] == "in_progress":
+                    tracker.milestone_done("creative_brief")
+                    sm = tracker.get_milestone("style_bible")
+                    if sm and sm["status"] == "pending":
+                        tracker.milestone_start("style_bible", 1)
+        except Exception:
+            pass
+
+        try:
+            sm = bible_path.stat().st_mtime if bible_path.exists() else 0
+            if sm > run_start and sm > bible_seen:
+                bible_seen = sm
+                m = tracker.get_milestone("style_bible")
+                if m and m["status"] == "in_progress":
+                    tracker.milestone_done("style_bible")
+        except Exception:
+            pass
+
+        stop.wait(timeout=3)
+
+
+def _finalize_crew_milestones(tracker: ProgressTracker, success: bool) -> None:
+    """Ensure creative_brief and style_bible end in a terminal state."""
+    for mid in ("creative_brief", "style_bible"):
+        m = tracker.get_milestone(mid)
+        if not m:
+            continue
+        if success and m["status"] != "completed":
+            tracker.milestone_done(mid)
+        elif not success and m["status"] in ("pending", "in_progress"):
+            tracker.milestone_fail(mid, "Creative planning failed", final=True)
 
 
 # ── Shoot folder ─────────────────────────────────────────
@@ -303,7 +408,11 @@ def _run_regen_pass(set_num: int) -> None:
 
 # ── Set pipeline ─────────────────────────────────────────
 
-def run_set(set_num: int, images_this_set: int) -> dict:
+def run_set(
+    set_num: int,
+    images_this_set: int,
+    tracker: ProgressTracker = None,
+) -> dict:
     """Run all steps for one set. Returns timing dict."""
     os.environ["CURRENT_SET"]     = str(set_num)
     os.environ["IMAGES_THIS_SET"] = str(images_this_set)
@@ -317,10 +426,12 @@ def run_set(set_num: int, images_this_set: int) -> dict:
         f"Set {set_num} — Image Generation",
         lambda: ImageGeneratorTool()._run(""),
         lambda r: _check_image_gen(r, images_this_set),
+        tracker=tracker,
+        mid=f"image_gen_set_{set_num}",
     )
     step_times["image_generation"] = int(time.time() - t0)
 
-    # Step 2 — Film Processing
+    # Step 2 — Film Processing (internal, not a top-level milestone)
     t0 = time.time()
     _run_step_with_retry(
         f"Set {set_num} — Film Processing",
@@ -335,13 +446,15 @@ def run_set(set_num: int, images_this_set: int) -> dict:
         f"Set {set_num} — Photo Editor",
         lambda: PhotoEditorTool()._run(""),
         _check_photo_editor,
+        tracker=tracker,
+        mid=f"photo_editor_set_{set_num}",
     )
     step_times["photo_editor"] = int(time.time() - t0)
 
     # Step 3b — Auto-regen structural failures
     _run_regen_pass(set_num)
 
-    # Step 4 — Catalog
+    # Step 4 — Catalog (internal, not a top-level milestone)
     t0 = time.time()
     _run_step_with_retry(
         f"Set {set_num} — Catalog",
@@ -411,6 +524,28 @@ def run():
     os.environ["SHOOT_ID"] = shoot_id
     print(f"Shoot ID: {shoot_id}")
 
+    # ── Start logger + progress tracker ──────────────
+    logger = RunLogger()
+    logger.start()
+
+    tracker = ProgressTracker()
+    tracker.start_run(shoot_id, PHASE1_MILESTONES)
+    tracker.set_meta(
+        shoot_folder=shoot_folder,
+        set_expected=IMAGE_DISTRIBUTION,   # {1: 17, 2: 17, 3: 16}
+    )
+
+    # ── Reset API counters for this sprint ───────────
+    _counters_path = Path("outputs/api_counters.json")
+    _counters_path.write_text(json.dumps({
+        "image_gen_calls":   0,
+        "preflight_calls":   0,
+        "fix_calls":         0,
+        "review_calls":      0,
+        "batch_check_calls": 0,
+        "text_calls":        0,
+    }, indent=2))
+
     # ── Check references ─────────────────────────────
     ref_dir    = Path("references")
     ref_images = []
@@ -442,11 +577,26 @@ def run():
         LunchbagCrew().run_with_report(phase=1, inputs=INPUTS)
         return "crew_complete"
 
-    _run_step_with_retry(
+    # Start crew with file watcher tracking brief + bible in background
+    crew_start_ts = time.time()
+    tracker.milestone_start("creative_brief")
+    _crew_stop  = threading.Event()
+    _crew_watch = threading.Thread(
+        target=_watch_crew_files,
+        args=(tracker, crew_start_ts, _crew_stop),
+        daemon=True,
+    )
+    _crew_watch.start()
+
+    crew_ok, _ = _run_step_with_retry(
         "Phase 1 — Creative Planning Crew",
         _run_crew,
         lambda _: _check_style_bible(),
     )
+
+    _crew_stop.set()
+    _crew_watch.join(timeout=5)
+    _finalize_crew_milestones(tracker, crew_ok)
 
     if not _check_style_bible():
         print(
@@ -469,6 +619,23 @@ def run():
     phase1_end     = time.time()   # creative planning just finished
     set_timings    = []
 
+    # Write timing file immediately so the webapp shows a live run
+    try:
+        _timing_path = Path("outputs/shoot_timing.json")
+        _timing_path.write_text(json.dumps({
+            "sprint_id":   os.environ.get("SHOOT_ID", "UNKNOWN"),
+            "shoot_start": shoot_start,
+            "started_at":  datetime.fromtimestamp(shoot_start).isoformat(),
+            "set_timings": [],
+        }, indent=2))
+    except Exception:
+        pass
+
+    # Start catalog watcher — keeps catalog.json live as images are
+    # generated and as the photo editor renames files.
+    _catalog_watcher = CatalogSyncWatcher()
+    _catalog_watcher.start()
+
     for set_num in range(1, TOTAL_SETS + 1):
         print("\n" + "="*60)
         print(
@@ -480,8 +647,19 @@ def run():
         images_this_set = get_images_per_set(
             total_images, TOTAL_SETS, set_num
         )
-        set_result = run_set(set_num, images_this_set)
+        set_result = run_set(set_num, images_this_set, tracker=tracker)
         set_timings.append(set_result)
+
+        # Update live timing file after each set so webapp tracks progress
+        try:
+            _timing_path.write_text(json.dumps({
+                "sprint_id":   os.environ.get("SHOOT_ID", "UNKNOWN"),
+                "shoot_start": shoot_start,
+                "started_at":  datetime.fromtimestamp(shoot_start).isoformat(),
+                "set_timings": set_timings,
+            }, indent=2))
+        except Exception:
+            pass
 
         print("\n" + "="*60)
         if set_num < TOTAL_SETS:
@@ -497,10 +675,14 @@ def run():
 
     os.environ["CURRENT_SET"] = "0"
 
+    # Stop watcher — does a final sync before returning
+    _catalog_watcher.stop()
+
     # ── Save timing for sprint reporter ──────────────
     shoot_end = time.time()
     try:
         timing_data = {
+            "sprint_id":       os.environ.get("SHOOT_ID", "UNKNOWN"),
             "shoot_start":     shoot_start,
             "phase1_end":      phase1_end,
             "phase1_duration": int(phase1_end - shoot_start),
@@ -526,6 +708,8 @@ def run():
             "Sprint Report",
             lambda: SprintReporterTool()._run(json.dumps(timing_data)),
             lambda r: "Sprint Report saved to" in r,
+            tracker=tracker,
+            mid="sprint_report",
         )
     except Exception as e:
         print(
@@ -534,6 +718,9 @@ def run():
             f"  Timing data: outputs/shoot_timing.json\n"
             f"  Run SprintReporterTool manually if needed.\n"
         )
+
+    tracker.finish_run("completed")
+    logger.stop()
 
 
 if __name__ == "__main__":

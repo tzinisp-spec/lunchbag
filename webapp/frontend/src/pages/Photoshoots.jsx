@@ -19,15 +19,15 @@ export default function Photoshoots() {
   if (loading) return <Loading />
 
   return (
-    <div className="p-8">
+    <div className="p-4 sm:p-6 md:p-8">
 
       <div className="mb-8">
-        <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Workflow</p>
-        <h1 className="text-2xl text-white font-semibold">Photoshoot</h1>
+        <p className="text-xs text-[var(--c-text-3)] uppercase tracking-wider mb-1">Workflow</p>
+        <h1 className="text-2xl text-[var(--c-text-1)] font-semibold">Photoshoot</h1>
       </div>
 
       {!shoots.length ? (
-        <div className="text-gray-600 text-sm">No shoots found in asset_library.</div>
+        <div className="text-[var(--c-text-4)] text-sm">No shoots found in asset_library.</div>
       ) : (
         <div className="space-y-3">
           {shoots.map(shoot => (
@@ -49,15 +49,15 @@ function ShootCard({ shoot, onClick }) {
 
   return (
     <div
-      className="bg-gray-900 border border-gray-800 rounded-lg p-6 hover:bg-gray-800/50 transition-colors cursor-pointer"
+      className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-6 hover:bg-[var(--c-surface-2)] transition-colors cursor-pointer"
       onClick={onClick}
     >
       <div className="flex items-center justify-between">
 
         {/* Left — name + meta */}
         <div>
-          <div className="text-white text-lg font-medium mb-1">{shoot.name}</div>
-          <div className="flex items-center gap-4 text-gray-400 text-sm">
+          <div className="text-[var(--c-text-1)] text-lg font-medium mb-1">{shoot.name}</div>
+          <div className="flex items-center gap-4 text-[var(--c-text-2)] text-sm">
             <span className="flex items-center gap-1.5">
               <CalendarDays size={13} />
               {shoot.date || shoot.month}
@@ -67,7 +67,7 @@ function ShootCard({ shoot, onClick }) {
               {shoot.total_images} images
             </span>
             {shoot.total_cost > 0 && (
-              <span className="text-gray-500">${shoot.total_cost.toFixed(2)}</span>
+              <span className="text-[var(--c-text-3)]">${shoot.total_cost.toFixed(2)}</span>
             )}
           </div>
         </div>
@@ -75,18 +75,18 @@ function ShootCard({ shoot, onClick }) {
         {/* Right — counts + status */}
         <div className="flex items-center gap-6">
           <div className="text-center hidden sm:block">
-            <div className="text-white font-semibold">{shoot.total_images}</div>
-            <div className="text-gray-500 text-xs">total</div>
+            <div className="text-[var(--c-text-1)] font-semibold">{shoot.total_images}</div>
+            <div className="text-[var(--c-text-3)] text-xs">total</div>
           </div>
           <div className="text-center hidden sm:block">
             <div className="text-green-400 font-semibold">{shoot.approved}</div>
-            <div className="text-gray-500 text-xs">approved</div>
+            <div className="text-[var(--c-text-3)] text-xs">approved</div>
           </div>
           <div className="text-center hidden sm:block">
-            <div className={`font-semibold ${shoot.needs_review > 0 ? 'text-orange-400' : 'text-gray-600'}`}>
+            <div className={`font-semibold ${shoot.needs_review > 0 ? 'text-orange-400' : 'text-[var(--c-text-4)]'}`}>
               {shoot.needs_review}
             </div>
-            <div className="text-gray-500 text-xs">review</div>
+            <div className="text-[var(--c-text-3)] text-xs">review</div>
           </div>
           <StatusBadge status={shoot.status} dot />
         </div>
@@ -99,7 +99,7 @@ function ShootCard({ shoot, onClick }) {
 function Loading() {
   return (
     <div className="p-8 flex items-center justify-center h-64">
-      <div className="text-gray-500 text-sm">Loading…</div>
+      <div className="text-[var(--c-text-3)] text-sm">Loading…</div>
     </div>
   )
 }

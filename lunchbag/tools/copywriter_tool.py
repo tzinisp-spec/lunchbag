@@ -1,15 +1,34 @@
 import os
 import json
 import base64
+import threading
 from pathlib import Path
 from datetime import datetime
 from google import genai
 from google.genai import types
 from crewai.tools import BaseTool
 
-SUPPORTED     = {".jpg", ".jpeg", ".png"}
-OUTPUTS_DIR   = Path("outputs")
-STRATEGY_PATH = Path("brand/copy_strategy.md")
+SUPPORTED        = {".jpg", ".jpeg", ".png"}
+OUTPUTS_DIR      = Path("outputs")
+STRATEGY_PATH    = Path("brand/copy_strategy.md")
+_API_COUNTER_PATH = OUTPUTS_DIR / "api_counters.json"
+_API_FILE_LOCK    = threading.Lock()
+
+
+def _track_api_call(category: str, count: int = 1) -> None:
+    with _API_FILE_LOCK:
+        try:
+            data = {}
+            if _API_COUNTER_PATH.exists():
+                try:
+                    data = json.loads(_API_COUNTER_PATH.read_text())
+                except Exception:
+                    pass
+            data[category] = data.get(category, 0) + count
+            _API_COUNTER_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _API_COUNTER_PATH.write_text(json.dumps(data, indent=2))
+        except Exception:
+            pass
 CALENDAR_PATH = Path("brand/greek_calendar.json")
 
 
@@ -455,6 +474,7 @@ class CopywriterTool(BaseTool):
                     strategy,
                     seasonal_context,
                 )
+                _track_api_call("text_calls", 2)  # analysis + caption
 
                 results.append(copy)
                 if copy.get("caption"):

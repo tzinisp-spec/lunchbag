@@ -539,7 +539,7 @@ def _count_asset_library() -> dict:
             "needs_review": 0, "art_review": 0,
         }
     files = [
-        f for f in _get_asset_dir().iterdir()
+        f for f in _get_asset_dir().rglob('*')
         if f.is_file()
         and f.suffix.lower() in SUPPORTED
         and "TEST-" not in f.name
@@ -552,14 +552,21 @@ def _count_asset_library() -> dict:
     ]
 
     sprint_id = "UNKNOWN"
-    if approved_files:
-        # Match lunchbag-SPRING-26-03-20
+    # Try approved files first, then fall back to any file
+    id_candidates = approved_files if approved_files else files
+    for candidate in id_candidates:
+        # Strip known prefixes before searching
+        name = candidate.name
+        for prefix in ("Needs Review-", "Art Review-"):
+            if name.startswith(prefix):
+                name = name[len(prefix):]
         match = re.search(
             r"([a-zA-Z]+-[A-Z]+-\d+-\d+-\d+)",
-            approved_files[0].name,
+            name,
         )
         if match:
             sprint_id = match.group(1)
+            break
 
     # Live counts from file system
     live_needs_review = sum(
@@ -625,30 +632,45 @@ def _estimate_costs(
     ad_data: dict,
     images_generated: int,
 ) -> dict:
-    # image-preview calls
-    # Assume avg 1.3 generation attempts per image
-    # (best case 1, some need 2-3)
-    gen_calls  = int(images_generated * 1.3)
-    fix_calls  = (
-        pe_data.get("fix_attempts", {}).get("1", 0)
-        + pe_data.get("fix_attempts", {}).get("2", 0) * 2
-        + pe_data.get("fix_attempts", {}).get("3", 0) * 3
-        + pe_data.get("flagged", 0) * 3
-    )
-    preflight_calls = 9  # 3 sets × 3 refs
+    # Try to read actual counters recorded during the pipeline run
+    api_counters = {}
+    counter_path = OUTPUTS_DIR / "api_counters.json"
+    if counter_path.exists():
+        try:
+            api_counters = json.loads(counter_path.read_text())
+        except Exception:
+            pass
 
-    # gemini-2.5-pro calls
-    review_calls      = pe_data.get("total", 0)
-    batch_check_calls = max(1, review_calls // 6)
-    text_calls        = 4  # style ref, art director, content planner, review gen
+    has_actual = bool(api_counters)
 
-    gen_cost      = gen_calls * COST_IMAGE_GENERATION
-    fix_cost      = fix_calls * COST_IMAGE_FIX
+    if has_actual:
+        gen_calls         = api_counters.get("image_gen_calls",   0)
+        fix_calls         = api_counters.get("fix_calls",         0)
+        preflight_calls   = api_counters.get("preflight_calls",   0)
+        review_calls      = api_counters.get("review_calls",      0)
+        batch_check_calls = api_counters.get("batch_check_calls", 0)
+        text_calls        = api_counters.get("text_calls",        0)
+    else:
+        # Fallback estimates when no counter file is available
+        gen_calls  = int(images_generated * 1.3)
+        fix_calls  = (
+            pe_data.get("fix_attempts", {}).get("1", 0)
+            + pe_data.get("fix_attempts", {}).get("2", 0) * 2
+            + pe_data.get("fix_attempts", {}).get("3", 0) * 3
+            + pe_data.get("flagged", 0) * 3
+        )
+        preflight_calls   = 9  # 3 sets × 3 refs
+        review_calls      = pe_data.get("total", 0)
+        batch_check_calls = max(1, review_calls // 6)
+        text_calls        = 4  # style ref, art director, content planner, review gen
+
+    gen_cost       = gen_calls * COST_IMAGE_GENERATION
+    fix_cost       = fix_calls * COST_IMAGE_FIX
     preflight_cost = preflight_calls * COST_IMAGE_GENERATION
-    review_cost   = review_calls * COST_REVIEW_CALL
-    batch_cost    = batch_check_calls * COST_BATCH_CHECK_CALL
-    text_cost     = text_calls * COST_TEXT_CALL
-    total_cost    = gen_cost + fix_cost + preflight_cost + review_cost + batch_cost + text_cost
+    review_cost    = review_calls * COST_REVIEW_CALL
+    batch_cost     = batch_check_calls * COST_BATCH_CHECK_CALL
+    text_cost      = text_calls * COST_TEXT_CALL
+    total_cost     = gen_cost + fix_cost + preflight_cost + review_cost + batch_cost + text_cost
 
     return {
         "gen_calls":           gen_calls,
@@ -662,6 +684,7 @@ def _estimate_costs(
         "fix_cost_usd":        round(fix_cost, 2),
         "review_cost_usd":     round(review_cost + batch_cost + text_cost, 2),
         "total_cost_usd":      round(total_cost, 2),
+        "costs_are_actual":    has_actual,
     }
 
 
@@ -732,55 +755,71 @@ class SprintReporterTool(BaseTool):
                 if images_planned == 0:
                     images_planned = assets["total"]
 
-            # Calculate timings from file mtimes
-            def get_mtime(filename: str) -> float:
-                p = OUTPUTS_DIR / filename
-                return p.stat().st_mtime if p.exists() else 0
-
-            brief_mtime   = get_mtime("creative_brief.md")
-            bible_mtime   = get_mtime("style_bible_and_shot_list.md")
-            package_mtime = get_mtime("image_generation_package.md")
-            pe_mtime      = get_mtime("photo_editor_latest.md")
-            ad_mtime      = get_mtime("art_director_latest.md")
-
             def safe_diff(a: float, b: float) -> int:
-                diff = int(a - b)
-                return max(0, diff)
+                return max(0, int(a - b))
 
-            # Use sprint start from timing input
-            # or earliest file mtime as fallback
-            earliest = min(
-                t for t in [
-                    brief_mtime, bible_mtime,
-                    package_mtime
-                ] if t > 0
-            ) if any([
-                brief_mtime, bible_mtime, package_mtime
-            ]) else 0
+            # ── Build step timings from actual data ──────
+            raw_set_timings = timing.get("set_timings", [])
+            phase1_duration = int(timing.get("phase1_duration", 0))
+            total_duration  = int(timing.get("total_duration", 0))
 
-            step_timings = {
-                "build_creative_brief":
-                    safe_diff(bible_mtime, earliest),
-                "create_style_bible":
-                    safe_diff(package_mtime, bible_mtime),
-                "build_image_generation_package":
-                    safe_diff(pe_mtime, package_mtime),
-                "run_photo_editor":
-                    safe_diff(ad_mtime, pe_mtime),
-                "write_catalog":              0,
-                "run_art_director":           0,
-                "final_approval":             0,
-            }
+            if raw_set_timings:
+                # Sum per-step times across all sets
+                def _sum_step(key: str) -> int:
+                    return sum(
+                        s.get("steps", {}).get(key, 0)
+                        for s in raw_set_timings
+                    )
+                # Phase 1 covers creative brief + style bible
+                # Split evenly between the two steps if no per-step data
+                brief_time = phase1_duration // 2
+                bible_time = phase1_duration - brief_time
+
+                step_timings = {
+                    "build_creative_brief":          brief_time,
+                    "create_style_bible":            bible_time,
+                    "build_image_generation_package": _sum_step("image_generation"),
+                    "run_photo_editor":              _sum_step("photo_editor"),
+                    "write_catalog":                 _sum_step("catalog"),
+                    "run_art_director":              0,
+                    "final_approval":                0,
+                }
+            else:
+                # Fallback: estimate from file mtimes
+                def get_mtime(filename: str) -> float:
+                    p = OUTPUTS_DIR / filename
+                    return p.stat().st_mtime if p.exists() else 0
+
+                brief_mtime   = get_mtime("creative_brief.md")
+                bible_mtime   = get_mtime("style_bible_and_shot_list.md")
+                package_mtime = get_mtime("image_generation_package.md")
+                pe_mtime      = get_mtime("photo_editor_latest.md")
+                ad_mtime      = get_mtime("art_director_latest.md")
+
+                earliest = min(
+                    t for t in [brief_mtime, bible_mtime, package_mtime] if t > 0
+                ) if any([brief_mtime, bible_mtime, package_mtime]) else 0
+
+                step_timings = {
+                    "build_creative_brief":          safe_diff(bible_mtime, earliest),
+                    "create_style_bible":            safe_diff(package_mtime, bible_mtime),
+                    "build_image_generation_package": safe_diff(pe_mtime, package_mtime),
+                    "run_photo_editor":              safe_diff(ad_mtime, pe_mtime),
+                    "write_catalog":                 0,
+                    "run_art_director":              0,
+                    "final_approval":                0,
+                }
 
             try:
                 started_at = datetime.fromisoformat(started_at_str)
             except Exception:
-                started_at = datetime.fromtimestamp(earliest) if earliest > 0 else datetime.now()
+                started_at = datetime.now()
 
             now           = datetime.now()
-            # If ad_mtime is earlier than start (older run), use now as end
-            end_time      = ad_mtime if ad_mtime > earliest else now.timestamp()
-            total_seconds = safe_diff(end_time, earliest) if earliest > 0 else int((now - started_at).total_seconds())
+            if total_duration > 0:
+                total_seconds = total_duration
+            else:
+                total_seconds = int((now - started_at).total_seconds())
             total_runtime = (
                 f"{total_seconds // 3600}h "
                 f"{(total_seconds % 3600) // 60}m "
@@ -1025,25 +1064,27 @@ class SprintReporterTool(BaseTool):
                         report += f"| `{r['filename']}` | {fails} | {r['pe_fix'] or 'N/A'} |\n"
                     report += "\n"
 
+            cost_label = "ACTUAL COST" if costs.get("costs_are_actual") else "ESTIMATED COST"
+            gen_label  = "Image generation" if costs.get("costs_are_actual") else "Image generation (~1.3 attempts avg)"
             report += (
                 f"\n{'='*55}\n"
-                f"## 7. API USAGE & ESTIMATED COST\n"
+                f"## 7. API USAGE & {cost_label}\n"
                 f"{'='*55}\n\n"
                 f"### gemini-3-pro-image-preview\n\n"
-                f"| Operation | Calls | Est. Cost |\n"
+                f"| Operation | Calls | Cost |\n"
                 f"|---|---|---|\n"
-                f"| Image generation (~1.3 attempts avg) | {costs['gen_calls']} | ${costs['gen_cost_usd']} |\n"
+                f"| {gen_label} | {costs['gen_calls']} | ${costs['gen_cost_usd']} |\n"
                 f"| Photo editor fixes | {costs['fix_calls']} | ${costs['fix_cost_usd']} |\n"
-                f"| Pre-flight ref scans | {costs['preflight_calls']} | ~$0.00 |\n\n"
+                f"| Pre-flight ref scans | {costs['preflight_calls']} | — |\n\n"
                 f"### gemini-2.5-pro\n\n"
-                f"| Operation | Calls | Est. Cost |\n"
+                f"| Operation | Calls | Cost |\n"
                 f"|---|---|---|\n"
                 f"| Photo editor reviews | {costs['review_calls']} | — |\n"
                 f"| Batch consistency checks | {costs['batch_check_calls']} | — |\n"
                 f"| Creative + content text calls | {costs['text_calls']} | — |\n"
                 f"| **Subtotal** | **{costs['review_calls'] + costs['batch_check_calls'] + costs['text_calls']}** | **${costs['review_cost_usd']}** |\n\n"
                 f"### Summary\n\n"
-                f"| | Calls | Est. Cost |\n"
+                f"| | Calls | Cost |\n"
                 f"|---|---|---|\n"
                 f"| Image generation model | {costs['gen_calls'] + costs['fix_calls'] + costs['preflight_calls']} | ${round(costs['gen_cost_usd'] + costs['fix_cost_usd'], 2)} |\n"
                 f"| Text/vision model | {costs['review_calls'] + costs['batch_check_calls'] + costs['text_calls']} | ${costs['review_cost_usd']} |\n"
