@@ -24,4 +24,12 @@ export const api = {
   imageUrl:       (path)                => `${BASE}/image?path=${encodeURIComponent(path)}`,
   approveImages:  (shootId, filenames)  => post(`/shoots/${shootId}/images/approve`, { filenames }),
   deleteImages:   (shootId, filenames)  => post(`/shoots/${shootId}/images/delete`,  { filenames }),
+  contentPosts:   ()                    => get('/content/posts'),
+  activity:       ()                    => get('/activity'),
+  logs:           (lines = 500)         => get(`/logs?lines=${lines}`),
+  status:         ()                    => get('/status'),
+  sprintReport:   ()                    => get('/sprint-report'),
+  brand:          ()                    => get('/brand'),
+  concept:        ()                    => get('/concept'),
+  products:       ()                    => get('/products'),
 }

@@ -1,26 +1,28 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, X, Check, Download, Tag, Trash2, CheckSquare, MoreHorizontal } from 'lucide-react'
 import { api } from '../lib/api'
 import StatusBadge from '../components/StatusBadge'
 import ImageLightbox from '../components/ImageLightbox'
 import ConfirmDialog from '../components/ConfirmDialog'
+import { useToast } from '../lib/toast'
 
 const SET_LABELS = { 1: 'Set 1', 2: 'Set 2', 3: 'Set 3', 0: 'Other' }
 
 const STATUS_BADGE = {
   needs_review: { label: 'Needs Review', cls: 'bg-orange-500 text-white' },
   regen:        { label: 'Regen',        cls: 'bg-red-600 text-white' },
-  pending:      { label: 'Pending',      cls: 'bg-gray-700 text-gray-300' },
 }
 
 export default function ShootDetail() {
-  const { shootId } = useParams()
-  const navigate    = useNavigate()
+  const { shootId }       = useParams()
+  const navigate          = useNavigate()
+  const [searchParams]    = useSearchParams()
+  const initialSet        = searchParams.get('set') ?? 'all'
 
   const [shoot,     setShoot]     = useState(null)
   const [loading,   setLoading]   = useState(true)
-  const [activeSet, setActiveSet] = useState('all')
+  const [activeSet, setActiveSet] = useState(initialSet)
 
   const [lightboxIndex, setLightboxIndex] = useState(null)
 
@@ -29,8 +31,15 @@ export default function ShootDetail() {
 
   const [confirm, setConfirm] = useState(null)   // { type, filenames }
   const [working, setWorking] = useState(false)
+  const { addToast } = useToast()
 
   // ── Load ──────────────────────────────────────────────────
+  const refresh = useCallback(() => {
+    api.shoot(shootId)
+      .then(data => setShoot(data))
+      .catch(console.error)
+  }, [shootId])
+
   const load = useCallback(() => {
     setLoading(true)
     api.shoot(shootId)
@@ -41,17 +50,27 @@ export default function ShootDetail() {
 
   useEffect(() => { load() }, [load])
 
+  // ── Poll continuously — fast during a live run, slower otherwise ──────────
+  const inProgress = shoot?.status === 'in_progress'
+  useEffect(() => {
+    const interval = inProgress ? 3000 : 8000
+    const id = setInterval(refresh, interval)
+    return () => clearInterval(id)
+  }, [refresh, inProgress])
+
   if (loading) return <Spinner />
   if (!shoot)  return <NotFound onBack={() => navigate('/photoshoots')} />
 
   // ── Derived ───────────────────────────────────────────────
-  const totalImages = shoot.total_images
+  const totalImages = shoot.images.length
   const approved    = shoot.images.filter(i => i.display_status === 'approved').length
   const needsReview = shoot.images.filter(i => i.display_status === 'needs_review').length
   const setNums     = Object.keys(shoot.sets ?? {}).map(Number).sort()
 
   const visibleImages = activeSet === 'all'
     ? shoot.images
+    : activeSet === 'review'
+    ? shoot.images.filter(img => img.display_status === 'needs_review')
     : shoot.images.filter(img => img.set === Number(activeSet))
 
   // ── Selection ─────────────────────────────────────────────
@@ -102,11 +121,15 @@ export default function ShootDetail() {
       if (updated?.images) {
         setShoot(updated)
         setSelected(new Set())
-        // If we deleted the lightbox image, close it
         if (lightboxIndex !== null) setLightboxIndex(null)
+        const count = filenames.length
+        const label = count === 1 ? '1 image' : `${count} images`
+        if (type === 'remove_tag') addToast('success', `${label} approved`)
+        if (type === 'delete')     addToast('success', `${label} deleted`)
       }
     } catch (e) {
       console.error(e)
+      addToast('error', type === 'delete' ? 'Failed to delete — try again' : 'Failed to approve — try again')
     } finally {
       setWorking(false)
     }
@@ -152,12 +175,12 @@ export default function ShootDetail() {
   const lightboxImg = lightboxIndex !== null ? visibleImages[lightboxIndex] : null
 
   return (
-    <div className={`p-8 ${selectMode && selected.size > 0 ? 'pb-32' : ''}`}>
+    <div className={`p-4 sm:p-6 md:p-8 ${selectMode && selected.size > 0 ? 'pb-32' : ''}`}>
 
       {/* Back */}
       <button
         onClick={() => navigate('/photoshoots')}
-        className="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-6 transition-colors"
+        className="flex items-center gap-2 text-[var(--c-text-2)] hover:text-[var(--c-text-1)] text-sm mb-6 transition-colors"
       >
         <ArrowLeft size={15} /> Back to Photoshoots
       </button>
@@ -165,9 +188,17 @@ export default function ShootDetail() {
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div>
-          <p className="text-xs text-gray-500 uppercase tracking-wider mb-1">Photoshoot</p>
-          <h1 className="text-2xl text-white font-semibold">{shoot.name}</h1>
-          <p className="text-gray-500 text-sm mt-1">{shoot.date || shoot.month} · {shoot.sprint_id}</p>
+          <p className="text-xs text-[var(--c-text-3)] uppercase tracking-wider mb-1">Photoshoot</p>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl text-[var(--c-text-1)] font-semibold">{shoot.name}</h1>
+            {inProgress && (
+              <span className="flex items-center gap-1 text-[10px] font-semibold text-green-400 bg-green-400/10 border border-green-400/30 px-1.5 py-0.5 rounded">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse inline-block" />
+                LIVE
+              </span>
+            )}
+          </div>
+          <p className="text-[var(--c-text-3)] text-sm mt-1">{shoot.date || shoot.month} · {shoot.sprint_id}</p>
         </div>
         <StatusBadge status={shoot.status} dot />
       </div>
@@ -182,7 +213,7 @@ export default function ShootDetail() {
           mainLabel="total images"
           items={[
             { label: 'Approved',     value: approved,    color: 'green'  },
-            { label: 'Needs review', value: needsReview, color: needsReview > 0 ? 'orange' : 'muted' },
+            { label: 'Needs review', value: needsReview, color: needsReview > 0 ? 'orange' : 'muted', pulse: needsReview > 0 },
             ...(shoot.regen > 0 ? [{ label: 'Regen', value: shoot.regen, color: 'red' }] : []),
           ]}
         />
@@ -237,7 +268,7 @@ export default function ShootDetail() {
       {/* Per-set breakdown */}
       {setNums.length > 0 && (
         <div className="mb-8">
-          <p className="text-xs text-gray-500 uppercase tracking-wider mb-4">Sets</p>
+          <p className="text-xs text-[var(--c-text-3)] uppercase tracking-wider mb-4">Sets</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             {setNums.map(s => {
               const imgs   = shoot.sets[s] ?? []
@@ -245,8 +276,8 @@ export default function ShootDetail() {
               const review = imgs.filter(i => i.display_status === 'needs_review').length
               const regen  = imgs.filter(i => i.display_status === 'regen').length
               return (
-                <div key={s} className="bg-gray-900 border border-gray-800 rounded-lg p-5">
-                  <div className="text-white font-medium mb-3">{SET_LABELS[s]}</div>
+                <div key={s} className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5">
+                  <div className="text-[var(--c-text-1)] font-medium mb-3">{SET_LABELS[s]}</div>
                   <div className="grid grid-cols-3 gap-2 text-center">
                     <Stat value={app}    label="approved" color="green"  />
                     <Stat value={review} label="review"   color={review > 0 ? 'orange' : undefined} />
@@ -267,7 +298,7 @@ export default function ShootDetail() {
               key={s}
               onClick={() => { setActiveSet(String(s)); clearSelect() }}
               className={`px-3 py-1 rounded text-xs transition-colors ${
-                activeSet === String(s) ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300'
+                activeSet === String(s) ? 'bg-[var(--c-surface-3)] text-[var(--c-text-1)]' : 'text-[var(--c-text-3)] hover:text-[var(--c-text-1b)]'
               }`}
             >
               {s === 'all'
@@ -275,30 +306,49 @@ export default function ShootDetail() {
                 : `${SET_LABELS[s]} (${(shoot.sets[s] ?? []).length})`}
             </button>
           ))}
+          {needsReview > 0 && (
+            <button
+              onClick={() => { setActiveSet('review'); clearSelect() }}
+              className={`px-3 py-1 rounded text-xs transition-colors ${
+                activeSet === 'review'
+                  ? 'bg-orange-500/20 text-orange-300 ring-1 ring-orange-500/40'
+                  : 'text-orange-400 hover:text-orange-300 hover:bg-orange-500/10'
+              }`}
+            >
+              Needs Review ({needsReview})
+            </button>
+          )}
         </div>
 
         <div className="flex items-center gap-3 shrink-0 ml-4">
           {selectMode && (
-            <button
-              onClick={selected.size === visibleImages.length ? clearSelect : selectAll}
-              className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors"
-            >
-              <CheckSquare size={13} />
-              {selected.size === visibleImages.length ? 'Deselect all' : 'Select all'}
-            </button>
+            <div className="flex items-center gap-3">
+              {selected.size > 0 && (
+                <span className="text-xs text-[var(--c-text-2)]">
+                  <span className="font-semibold text-[var(--c-text-1)]">{selected.size}</span> selected
+                </span>
+              )}
+              <button
+                onClick={selected.size === visibleImages.length ? clearSelect : selectAll}
+                className="flex items-center gap-1.5 text-xs text-[var(--c-text-2)] hover:text-[var(--c-text-1)] transition-colors"
+              >
+                <CheckSquare size={13} />
+                {selected.size === visibleImages.length ? 'Deselect all' : 'Select all'}
+              </button>
+            </div>
           )}
 
           {selectMode ? (
             <button
               onClick={exitSelect}
-              className="flex items-center gap-2 text-sm text-gray-400 hover:text-white border border-gray-700 px-3 py-1.5 rounded-lg transition-colors"
+              className="flex items-center gap-2 text-sm text-[var(--c-text-2)] hover:text-[var(--c-text-1)] border border-[var(--c-border-2)] px-3 py-1.5 rounded-lg transition-colors"
             >
               <X size={14} /> Done
             </button>
           ) : (
             <button
               onClick={() => setSelectMode(true)}
-              className="flex items-center gap-2 text-sm text-white bg-gray-800 hover:bg-gray-700 border border-gray-700 px-3 py-1.5 rounded-lg transition-colors"
+              className="flex items-center gap-2 text-sm text-[var(--c-text-1)] bg-[var(--c-surface-2)] hover:bg-[var(--c-surface-3)] border border-[var(--c-border-2)] px-3 py-1.5 rounded-lg transition-colors"
             >
               <CheckSquare size={13} /> Select
             </button>
@@ -308,7 +358,7 @@ export default function ShootDetail() {
 
       {/* Image grid */}
       {visibleImages.length === 0 ? (
-        <div className="text-gray-600 text-sm py-8">No images.</div>
+        <div className="text-[var(--c-text-4)] text-sm py-8">No images.</div>
       ) : (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4">
           {visibleImages.map((img, idx) => (
@@ -327,16 +377,16 @@ export default function ShootDetail() {
       {/* Floating action bar (select mode + selection) */}
       {selectMode && selected.size > 0 && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-max">
-          <div className="flex items-center gap-2 bg-gray-950 border border-gray-700 rounded-2xl shadow-2xl px-4 py-3">
-            <span className="text-white text-sm font-medium px-1">{selected.size} selected</span>
-            <div className="w-px h-5 bg-gray-700 mx-1" />
+          <div className="flex items-center gap-2 bg-[var(--c-page)] border border-[var(--c-border-2)] rounded-2xl shadow-2xl px-4 py-3">
+            <span className="text-[var(--c-text-1)] text-sm font-medium px-1">{selected.size} selected</span>
+            <div className="w-px h-5 bg-[var(--c-border-2)] mx-1" />
             <ActionButton icon={Download} label="Download"         onClick={handleBulkDownload}                        disabled={working} />
             {selectedHasReviewImages && (
               <ActionButton icon={Tag}      label="Remove Review tag" onClick={() => requestBulkAction('remove_tag')}   disabled={working} color="orange" />
             )}
             <ActionButton icon={Trash2}   label="Delete"           onClick={() => requestBulkAction('delete')}         disabled={working} color="red" />
-            <div className="w-px h-5 bg-gray-700 mx-1" />
-            <button onClick={clearSelect} className="text-gray-400 hover:text-white transition-colors p-1 rounded">
+            <div className="w-px h-5 bg-[var(--c-border-2)] mx-1" />
+            <button onClick={clearSelect} className="text-[var(--c-text-2)] hover:text-[var(--c-text-1)] transition-colors p-1 rounded">
               <X size={15} />
             </button>
           </div>
@@ -392,16 +442,16 @@ function ImageTile({ img, selectMode, isSelected, onClick, onAction }) {
   return (
     <div
       onClick={onClick}
-      className={`group relative bg-gray-900 rounded-lg overflow-hidden border transition-all cursor-pointer select-none ${
+      className={`group relative bg-[var(--c-surface)] rounded-lg border transition-all cursor-pointer select-none ${
         isSelected
           ? 'border-blue-500 ring-2 ring-blue-500/30'
           : selectMode
-          ? 'border-gray-700 hover:border-gray-500'
-          : 'border-gray-800 hover:border-gray-600'
+          ? 'border-[var(--c-border-2)] hover:border-[var(--c-border-2)]'
+          : 'border-[var(--c-border)] hover:border-[var(--c-border-2)]'
       }`}
     >
       {/* Image */}
-      <div className="relative aspect-[3/4]">
+      <div className="relative aspect-[3/4] overflow-hidden rounded-t-lg">
         <img
           src={api.imageUrl(img.path)}
           alt={img.filename}
@@ -434,8 +484,8 @@ function ImageTile({ img, selectMode, isSelected, onClick, onAction }) {
 
       {/* Footer */}
       <div className="px-2 py-1.5 flex items-center justify-between gap-1">
-        <div className="text-gray-500 text-xs truncate">
-          {img.ref_code?.split('-').slice(-2).join('-')}
+        <div className="text-[var(--c-text-3)] text-xs truncate">
+          {(img.ref_code || img.filename)?.split('-').slice(-2).join('-').replace('.png','')}
         </div>
 
         {/* 3-dot menu — hidden in select mode */}
@@ -443,7 +493,7 @@ function ImageTile({ img, selectMode, isSelected, onClick, onAction }) {
           <div className="relative shrink-0" ref={menuRef}>
             <button
               onClick={e => { e.stopPropagation(); setMenuOpen(v => !v) }}
-              className="w-6 h-6 rounded flex items-center justify-center text-gray-600 hover:text-gray-300 hover:bg-gray-700 transition-colors opacity-0 group-hover:opacity-100"
+              className="w-6 h-6 rounded flex items-center justify-center text-[var(--c-text-4)] hover:text-[var(--c-text-1b)] hover:bg-[var(--c-surface-3)] transition-colors"
             >
               <MoreHorizontal size={14} />
             </button>
@@ -464,23 +514,23 @@ function ImageTile({ img, selectMode, isSelected, onClick, onAction }) {
 function TileMenu({ img, onAction }) {
   const isReview = img.display_status === 'needs_review'
   return (
-    <div className="absolute bottom-full right-0 mb-1 w-48 bg-gray-800 border border-gray-700 rounded-lg shadow-xl overflow-hidden z-20 py-1">
+    <div className="absolute bottom-full right-0 mb-1 w-48 bg-[var(--c-surface-2)] border border-[var(--c-border-2)] rounded-lg shadow-xl overflow-hidden z-[60] py-1">
       <MenuItem icon={Download} label="Download"          onClick={() => onAction('download')} />
       {isReview && (
         <MenuItem icon={Tag}    label="Remove Review tag" onClick={() => onAction('remove_tag')} color="orange" />
       )}
-      <div className="my-1 border-t border-gray-700" />
+      <div className="my-1 border-t border-[var(--c-border-2)]" />
       <MenuItem icon={Trash2}  label="Delete image"      onClick={() => onAction('delete')} color="red" />
     </div>
   )
 }
 
 function MenuItem({ icon: Icon, label, onClick, color }) {
-  const cls = { orange: 'text-orange-400', red: 'text-red-400' }[color] ?? 'text-gray-200'
+  const cls = { orange: 'text-orange-400', red: 'text-red-400' }[color] ?? 'text-[var(--c-text-1b)]'
   return (
     <button
       onClick={onClick}
-      className={`w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-gray-700 transition-colors ${cls}`}
+      className={`w-full flex items-center gap-3 px-3 py-2 text-sm hover:bg-[var(--c-surface-3)] transition-colors ${cls}`}
     >
       <Icon size={14} />
       {label}
@@ -494,7 +544,7 @@ function ActionButton({ icon: Icon, label, onClick, disabled, color }) {
   const cls = {
     orange: 'hover:bg-orange-600/20 hover:text-orange-300 text-orange-400',
     red:    'hover:bg-red-600/20 hover:text-red-300 text-red-400',
-  }[color] ?? 'hover:bg-gray-700 text-gray-200'
+  }[color] ?? 'hover:bg-[var(--c-surface-3)] text-[var(--c-text-1b)]'
   return (
     <button
       onClick={onClick}
@@ -512,21 +562,21 @@ const VALUE_COLOR = {
   green:  'text-green-400',
   orange: 'text-orange-400',
   red:    'text-red-400',
-  muted:  'text-gray-600',
+  muted:  'text-[var(--c-text-4)]',
 }
 
 function DetailTile({ title, main, mainLabel, items = [] }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-lg p-5 flex flex-col">
-      <div className="text-gray-500 text-xs uppercase tracking-wider mb-3">{title}</div>
-      <div className="text-2xl text-white font-semibold leading-none">{main}</div>
-      {mainLabel && <div className="text-gray-600 text-xs mt-1">{mainLabel}</div>}
+    <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-lg p-5 flex flex-col">
+      <div className="text-[var(--c-text-3)] text-xs uppercase tracking-wider mb-3">{title}</div>
+      <div className="text-2xl text-[var(--c-text-1)] font-semibold leading-none">{main}</div>
+      {mainLabel && <div className="text-[var(--c-text-4)] text-xs mt-1">{mainLabel}</div>}
       {items.length > 0 && (
-        <div className="mt-3 pt-3 border-t border-gray-800 space-y-1.5 flex-1">
+        <div className="mt-3 pt-3 border-t border-[var(--c-border)] space-y-1.5 flex-1">
           {items.map((item, i) => (
             <div key={i} className="flex items-center justify-between gap-2">
-              <span className="text-gray-500 text-xs truncate">{item.label}</span>
-              <span className={`text-xs font-medium shrink-0 ${VALUE_COLOR[item.color] ?? 'text-gray-300'}`}>
+              <span className="text-[var(--c-text-3)] text-xs truncate">{item.label}</span>
+              <span className={`text-xs font-medium shrink-0 ${VALUE_COLOR[item.color] ?? 'text-[var(--c-text-1b)]'} ${item.pulse ? 'animate-pulse' : ''}`}>
                 {item.value}
               </span>
             </div>
@@ -547,24 +597,24 @@ function modelShortName(name) {
 }
 
 function Stat({ value, label, color }) {
-  const cls = { green: 'text-green-400', orange: 'text-orange-400', red: 'text-red-400' }[color] ?? 'text-gray-600'
+  const cls = { green: 'text-green-400', orange: 'text-orange-400', red: 'text-red-400' }[color] ?? 'text-[var(--c-text-4)]'
   return (
     <div>
       <div className={`font-semibold ${cls}`}>{value}</div>
-      <div className="text-gray-600 text-xs">{label}</div>
+      <div className="text-[var(--c-text-4)] text-xs">{label}</div>
     </div>
   )
 }
 
 function Spinner() {
-  return <div className="p-8 flex items-center justify-center h-64"><div className="text-gray-500 text-sm">Loading…</div></div>
+  return <div className="p-8 flex items-center justify-center h-64"><div className="text-[var(--c-text-3)] text-sm">Loading…</div></div>
 }
 
 function NotFound({ onBack }) {
   return (
     <div className="p-8">
-      <button onClick={onBack} className="flex items-center gap-2 text-gray-400 hover:text-white text-sm mb-6"><ArrowLeft size={15} /> Back</button>
-      <p className="text-gray-500">Shoot not found.</p>
+      <button onClick={onBack} className="flex items-center gap-2 text-[var(--c-text-2)] hover:text-[var(--c-text-1)] text-sm mb-6"><ArrowLeft size={15} /> Back</button>
+      <p className="text-[var(--c-text-3)]">Shoot not found.</p>
     </div>
   )
 }
