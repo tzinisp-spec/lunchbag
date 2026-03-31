@@ -12,7 +12,7 @@ export default function ToastContainer() {
   const { toasts, dismiss } = useToast()
   if (!toasts.length) return null
   return (
-    <div className="fixed bottom-5 right-5 z-[200] flex flex-col gap-2 items-end pointer-events-none">
+    <div className="fixed top-5 right-5 z-[200] flex flex-col gap-2 items-end pointer-events-none">
       {toasts.map(t => <Toast key={t.id} toast={t} onDismiss={() => dismiss(t.id)} />)}
     </div>
   )

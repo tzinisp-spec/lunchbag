@@ -86,6 +86,38 @@ def _get_next_monday() -> datetime:
     )
 
 
+def _get_planning_start() -> datetime:
+    """Return the first Monday of the target planning month.
+    Reads PLANNING_MONTH env var (format: YYYY-MM).
+    Falls back to next Monday from today if not set.
+    """
+    planning_month = os.getenv("PLANNING_MONTH", "").strip()
+    if planning_month:
+        try:
+            year, month = map(int, planning_month.split("-"))
+            first_day = datetime(year, month, 1)
+            # days until first Monday (0 = Monday)
+            days_to_monday = (0 - first_day.weekday()) % 7
+            return first_day + timedelta(days=days_to_monday)
+        except (ValueError, AttributeError):
+            pass
+    return _get_next_monday()
+
+
+def _get_planning_month_num() -> int:
+    """Return the target planning month number (1–12).
+    Reads PLANNING_MONTH env var (format: YYYY-MM).
+    Falls back to current month.
+    """
+    planning_month = os.getenv("PLANNING_MONTH", "").strip()
+    if planning_month:
+        try:
+            return int(planning_month.split("-")[1])
+        except (ValueError, IndexError):
+            pass
+    return datetime.now().month
+
+
 def _get_set_number(ref_code: str) -> str:
     """Extract set number from ref_code e.g. S1, S2."""
     import re
@@ -105,7 +137,7 @@ def _is_holiday(
 
 
 def _get_seasonal_note(calendar: dict) -> str:
-    month = datetime.now().month
+    month = _get_planning_month_num()
     for s in calendar.get("seasons", []):
         if month in s.get("months", []):
             return s.get("tone", "")
@@ -276,7 +308,7 @@ class ContentPlannerTool(BaseTool):
             )
 
             # Build 4-week calendar
-            next_monday   = _get_next_monday()
+            next_monday   = _get_planning_start()
             seasonal_note = _get_seasonal_note(calendar)
             all_posts     = []
             carousel_pool = list(carousels)

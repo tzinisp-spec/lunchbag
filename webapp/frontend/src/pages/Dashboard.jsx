@@ -94,7 +94,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="mb-8">
         <p className="text-xs text-[var(--c-text-3)] uppercase tracking-wider mb-1">Dashboard</p>
-        <h1 className="text-2xl text-[var(--c-text-1)] font-semibold">Lunchbag</h1>
+        <h1 className="text-2xl text-[var(--c-text-1)] font-semibold">COMAP</h1>
       </div>
 
       {/* Overview */}
@@ -102,31 +102,61 @@ export default function Dashboard() {
         {/* Section header + period selector */}
         <div className="flex items-start justify-between gap-4 mb-4 flex-wrap">
           <div className="flex items-center gap-2">
-            <p className="text-xs text-[var(--c-text-3)] uppercase tracking-wider">Overview</p>
+            <p className="text-xs text-[var(--c-text-3)] uppercase tracking-wider">
+              Overview
+              {(() => {
+                let label = ''
+                if (period === 'latest' && stats?.phase === 'content_planning')
+                  label = stats.plan_label || 'Content Planning'
+                else if (period === 'latest' && stats?.name)
+                  label = stats.name
+                else if (period && period !== 'latest' && period !== 'all') {
+                  const [y, m] = period.split('-')
+                  label = new Date(+y, +m - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+                }
+                return label ? <span className="normal-case ml-1 text-[var(--c-text-4)] font-normal tracking-normal">({label})</span> : null
+              })()}
+            </p>
             {isLive && period === 'latest' && <LiveBadge />}
           </div>
-          <PeriodSelector value={period} onChange={setPeriod} months={months} disabled={isLive} />
+          <PeriodSelector value={period} onChange={setPeriod} months={months} disabled={isLive} stats={stats} />
         </div>
 
         {/* 5 Detail tiles */}
         <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
 
-          <DetailTile
-            title="Produced Images"
-            main={fmt(stats.total_images)}
-            mainLabel={period === 'all' ? `across ${stats.shoot_count ?? d.shoots} shoots` : 'total images'}
-            items={[
-              { label: 'Approved',     value: fmt(stats.approved),     color: 'green'  },
-              { label: 'Needs review', value: fmt(stats.needs_review), color: (stats.needs_review > 0) ? 'orange' : 'muted' },
-              ...(stats.regen > 0 ? [{ label: 'Regen', value: fmt(stats.regen), color: 'red' }] : []),
-            ]}
-          />
+          {stats.phase === 'content_planning' ? (
+            <DetailTile
+              title="Content Plan"
+              main={fmt(stats.total_images)}
+              mainLabel="posts planned"
+              items={[
+                { label: 'Single posts', value: fmt(stats.approved),      color: 'green' },
+                { label: 'Carousels',    value: fmt(stats.needs_review),  color: 'muted' },
+              ]}
+            />
+          ) : (
+            <DetailTile
+              title="Produced Images"
+              main={fmt(stats.total_images)}
+              mainLabel={period === 'all' ? `across ${stats.shoot_count ?? d.shoots} shoots` : 'total images'}
+              items={[
+                { label: 'Approved',     value: fmt(stats.approved),     color: 'green'  },
+                { label: 'Needs review', value: fmt(stats.needs_review), color: (stats.needs_review > 0) ? 'orange' : 'muted' },
+                ...(stats.regen > 0 ? [{ label: 'Regen', value: fmt(stats.regen), color: 'red' }] : []),
+              ]}
+            />
+          )}
 
           <DetailTile
             title="Processing Time"
             main={stats.runtime ?? '—'}
             mainLabel="total"
-            items={[
+            items={stats.phase === 'content_planning' ? [
+              ...(stats.time_copywriter       ? [{ label: 'Copywriter',     value: stats.time_copywriter       }] : []),
+              ...(stats.time_content_planner  ? [{ label: 'Content Plan',   value: stats.time_content_planner  }] : []),
+              ...(stats.time_review_generator ? [{ label: 'Review Gen',     value: stats.time_review_generator }] : []),
+            ] : [
               { label: 'Brief',        value: stats.time_brief        || '—' },
               { label: 'Generation',   value: stats.time_generation   || '—' },
               { label: 'Photo Editor', value: stats.time_photo_editor || '—' },
@@ -141,7 +171,7 @@ export default function Dashboard() {
             main={fmt(stats.total_calls) || '—'}
             mainLabel="total calls"
             items={[
-              { label: modelShortName(stats.image_model_name), value: fmt(stats.calls_image_model) || '—' },
+              ...(stats.image_model_name ? [{ label: modelShortName(stats.image_model_name), value: fmt(stats.calls_image_model) || '—' }] : []),
               { label: modelShortName(stats.text_model_name),  value: fmt(stats.calls_text_model)  || '—' },
             ].filter(i => i.value !== '0')}
           />
@@ -433,7 +463,7 @@ function TaskRow({ task, navigate }) {
         )}
         {hasReport && (
           <button
-            onClick={() => navigate('/sprint-report')}
+            onClick={() => navigate(task.report_type === 'content_plan' ? '/content-plan-report' : '/photoshoot-report')}
             className="shrink-0 text-[10px] text-purple-400 hover:text-purple-300 transition-colors"
           >
             See the report →
@@ -493,11 +523,11 @@ function ShootRow({ shoot, onClick }) {
 
 // ── Period selector ───────────────────────────────────────────────────────────
 
-function PeriodSelector({ value, onChange, months, disabled }) {
+function PeriodSelector({ value, onChange, months, disabled, stats }) {
   return (
     <div className={`flex items-center gap-1 flex-wrap ${disabled ? 'opacity-40 pointer-events-none' : ''}`}>
       {[
-        { key: 'latest', label: 'Latest Run' },
+        { key: 'latest', label: value === 'latest' && stats?.phase === 'content_planning' ? 'Latest Content Plan' : 'Latest Run' },
         { key: 'all',    label: 'All Time'   },
       ].map(({ key, label }) => (
         <button

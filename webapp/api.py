@@ -4,11 +4,13 @@ Serves data from the pipeline's output files.
 """
 
 import json
+import queue
 import re
 from pathlib import Path
 from datetime import datetime
-from flask import Flask, jsonify, send_file, request, abort
+from flask import Flask, jsonify, send_file, request, abort, Response, stream_with_context
 from flask_cors import CORS
+from process_manager import process_manager, process_manager_p2
 
 app = Flask(__name__)
 CORS(app)
@@ -19,7 +21,15 @@ REPORTS_DIR  = ROOT / "outputs" / "sprint_reports"
 OUTPUTS_DIR  = ROOT / "outputs"
 BRAND_DIR    = ROOT / "brand"
 AGENTS_YAML  = ROOT / "lunchbag" / "config" / "agents.yaml"
-CONCEPT_PATH = ROOT / "concept.md"
+CONCEPT_PATH      = ROOT / "concept.md"
+SHOOT_CONFIG_PATH = ROOT / "lunchbag" / "config" / "shoot_config.json"
+
+_SHOOT_CONFIG_DEFAULTS = {
+    "images_per_sprint": "50",
+    "product_focus":     "Original thermal lunch bag — cotton exterior, waterproof interior, Thermo Hot&Cold mechanism, H21cm x W16cm x D24cm, various prints and colours",
+    "product_materials": "Cotton exterior, waterproof interior lining, thermal insulation, fabric straps. Surface has a soft textile feel — not leather, not plastic, not glossy. Bold graphic prints on cotton.",
+    "target_audience":   "Women and men 25-45, Greece and Europe, active lifestyle, health-conscious, daily commuters, parents, office workers, anyone who carries food on the go",
+}
 PRODUCTS_DIR = ROOT / "products"
 
 # Maps agents.yaml keys → frontend agent IDs
@@ -425,11 +435,34 @@ def dashboard():
     for s in active:
         by_month.setdefault(s["month"], []).append(s)
 
-    # If a run is active, show live stats for the current shoot in the
-    # "Latest Run" tile instead of the last completed shoot's data.
-    progress = _read_progress()
-    is_live  = bool(progress and progress.get("status") == "in_progress")
-    latest_shoot = _live_stats(progress) if is_live else (active[0] if active else {})
+    # Decide what to show as "Latest Run" in the Overview tiles.
+    # Phase 2 (content planning) runs independently — if its progress file is
+    # newer than Phase 1's, or if it is currently live, show Phase 2 stats.
+    progress    = _read_progress()
+    progress_p2 = _read_progress_p2()
+
+    p1_is_live = bool(progress    and progress.get("status")    == "in_progress")
+    p2_is_live = bool(progress_p2 and progress_p2.get("status") == "in_progress")
+
+    # Use Phase 2 stats if it is live, or if its file is newer than Phase 1's
+    use_p2 = False
+    if progress_p2:
+        if p2_is_live:
+            use_p2 = True
+        elif PROGRESS_P2_PATH.exists() and (
+            not PROGRESS_PATH.exists()
+            or PROGRESS_P2_PATH.stat().st_mtime > PROGRESS_PATH.stat().st_mtime
+        ):
+            use_p2 = True
+
+    is_live = p1_is_live or p2_is_live
+
+    if use_p2:
+        latest_shoot = _p2_stats(progress_p2)
+    elif p1_is_live:
+        latest_shoot = _live_stats(progress)
+    else:
+        latest_shoot = active[0] if active else {}
 
     return jsonify({
         "agents":            len(_load_agents()),
@@ -557,32 +590,46 @@ def approve_images(shoot_id):
 
     catalog, images = _load_catalog(shoot_dir)
 
+    failed = []
     for filename in filenames:
         img = next((i for i in images if i["filename"] == filename), None)
         if not img:
             continue
-        src = (ROOT / img["path"]).resolve()
-        if not src.exists():
+
+        new_name = _strip_prefix(filename)
+
+        # No prefix to strip — just mark approved in catalog
+        if new_name == filename:
             img["status"] = "approved"
             continue
 
-        new_name = _strip_prefix(filename)
+        src = (ROOT / img["path"]).resolve()
+        if not src.exists():
+            # File already gone from expected path — skip rename but keep catalog clean
+            img["status"]   = "approved"
+            img["filename"] = new_name
+            img["id"]       = Path(new_name).stem
+            img["ref_code"] = Path(new_name).stem
+            continue
+
         dest = src.parent / new_name
         if dest.exists() and dest != src:
-            # avoid overwriting — keep a unique name
             dest = src.parent / f"approved-{new_name}"
 
         try:
             src.rename(dest)
-        except Exception:
-            pass  # file rename failed — still mark approved in catalog
+        except Exception as e:
+            failed.append(f"{filename}: {e}")
+            continue  # rename failed — do NOT update catalog for this file
 
-        rel = str(dest.relative_to(ROOT))
         img["filename"] = dest.name
-        img["path"]     = rel
+        img["path"]     = str(dest.relative_to(ROOT))
         img["id"]       = dest.stem
         img["ref_code"] = dest.stem
         img["status"]   = "approved"
+
+    if failed:
+        return jsonify({"error": "Some files could not be renamed", "details": failed}), 500
 
     _save_catalog(shoot_dir, catalog)
     return jsonify(_load_shoot_detail(month_dir, shoot_dir))
@@ -634,14 +681,46 @@ def agents():
     return jsonify(_load_agents())
 
 
-@app.route("/api/concept")
-def concept():
+@app.route("/api/concept", methods=["GET"])
+def concept_get():
     if not CONCEPT_PATH.exists():
-        return jsonify(None)
-    stat = CONCEPT_PATH.stat()
-    data = _parse_concept(CONCEPT_PATH.read_text())
-    data["last_modified"] = datetime.fromtimestamp(stat.st_mtime).isoformat()
-    return jsonify(data)
+        return jsonify({"text": ""})
+    return jsonify({"text": CONCEPT_PATH.read_text()})
+
+@app.route("/api/concept", methods=["POST"])
+def concept_save():
+    body = request.get_json(silent=True) or {}
+    text = body.get("text", "")
+    CONCEPT_PATH.write_text(text)
+    return jsonify({"ok": True})
+
+
+@app.route("/api/run/config", methods=["GET"])
+def run_config_get():
+    config = dict(_SHOOT_CONFIG_DEFAULTS)
+    if SHOOT_CONFIG_PATH.exists():
+        try:
+            config.update(json.loads(SHOOT_CONFIG_PATH.read_text()))
+        except Exception:
+            pass
+    return jsonify(config)
+
+
+@app.route("/api/run/config", methods=["POST"])
+def run_config_save():
+    body = request.get_json(silent=True) or {}
+    # Merge with existing, only update known keys
+    config = dict(_SHOOT_CONFIG_DEFAULTS)
+    if SHOOT_CONFIG_PATH.exists():
+        try:
+            config.update(json.loads(SHOOT_CONFIG_PATH.read_text()))
+        except Exception:
+            pass
+    for key in _SHOOT_CONFIG_DEFAULTS:
+        if key in body:
+            config[key] = body[key]
+    SHOOT_CONFIG_PATH.write_text(json.dumps(config, indent=2))
+    return jsonify({"ok": True})
 
 
 @app.route("/api/products")
@@ -881,7 +960,8 @@ def _checkpoint_events(ckpt: dict) -> list[dict]:
     return events
 
 
-PROGRESS_PATH = OUTPUTS_DIR / "run_progress.json"
+PROGRESS_PATH    = OUTPUTS_DIR / "run_progress.json"
+PROGRESS_P2_PATH = OUTPUTS_DIR / "run_progress_p2.json"
 
 
 def _read_progress() -> dict | None:
@@ -889,6 +969,16 @@ def _read_progress() -> dict | None:
     if PROGRESS_PATH.exists():
         try:
             return json.loads(PROGRESS_PATH.read_text())
+        except Exception:
+            return None
+    return None
+
+
+def _read_progress_p2() -> dict | None:
+    """Read run_progress_p2.json if it exists."""
+    if PROGRESS_P2_PATH.exists():
+        try:
+            return json.loads(PROGRESS_P2_PATH.read_text())
         except Exception:
             return None
     return None
@@ -1117,6 +1207,116 @@ def _live_stats(progress: dict) -> dict:
     }
 
 
+def _p2_stats(progress: dict) -> dict:
+    """
+    Build dashboard-tile stats from a Phase 2 run_progress_p2.json.
+    Uses the same shape as _live_stats / _load_shoot so tiles render unchanged,
+    but repurposes the 'images' tile for content-plan post counts.
+    """
+    import time as _time
+
+    started_at  = progress.get("started_at", "")
+    milestones  = {m["id"]: m for m in progress.get("milestones", [])}
+    is_live     = progress.get("status") == "in_progress"
+
+    # ── Runtime ──────────────────────────────────────────────────────────────
+    runtime = "—"
+    if started_at:
+        try:
+            completed_at = progress.get("completed_at")
+            if completed_at:
+                elapsed = (datetime.fromisoformat(completed_at)
+                           - datetime.fromisoformat(started_at)).total_seconds()
+            else:
+                elapsed = _time.time() - datetime.fromisoformat(started_at).timestamp()
+            runtime = _progress_fmt(int(elapsed)) + ("…" if is_live and not completed_at else "")
+        except Exception:
+            pass
+
+    # ── Step timings ─────────────────────────────────────────────────────────
+    def _dur(mid: str):
+        m = milestones.get(mid)
+        if not m:
+            return None
+        if m.get("duration_s"):
+            return _progress_fmt(m["duration_s"])
+        if m.get("status") == "in_progress" and m.get("started_at"):
+            try:
+                elapsed = _time.time() - datetime.fromisoformat(m["started_at"]).timestamp()
+                return _progress_fmt(int(elapsed)) + "…"
+            except Exception:
+                pass
+        return None
+
+    # ── Post counts + plan label from monthly_calendar.json ──────────────────
+    total_posts = single_posts = carousel_posts = 0
+    plan_label  = ""
+    calendar_path = CONTENT_DIR / "monthly_calendar.json"
+    if not calendar_path.exists():
+        calendar_path = CONTENT_DIR / "weekly_calendar.json"
+    if calendar_path.exists():
+        try:
+            cal = json.loads(calendar_path.read_text())
+            plan_label = cal.get("month_of", "")
+            for p in cal.get("posts", []):
+                total_posts += 1
+                if p.get("type") == "carousel":
+                    carousel_posts += 1
+                else:
+                    single_posts += 1
+        except Exception:
+            pass
+
+    # ── API counters ──────────────────────────────────────────────────────────
+    calls_text = 0
+    if COUNTERS_PATH.exists():
+        try:
+            c = json.loads(COUNTERS_PATH.read_text())
+            calls_text = (c.get("text_calls", 0)
+                          + c.get("review_calls", 0)
+                          + c.get("fix_calls", 0)
+                          + c.get("batch_check_calls", 0)
+                          + c.get("preflight_calls", 0))
+        except Exception:
+            pass
+
+    return {
+        "phase":             "content_planning",
+        "id":                "content_plan_latest",
+        "name":              progress.get("run_id", "Content Plan"),
+        "status":            progress.get("status", "completed"),
+        # Repurposed "images" tile → content plan post counts
+        "total_images":      total_posts,
+        "approved":          single_posts,
+        "needs_review":      carousel_posts,
+        "regen":             0,
+        # Timings — Phase 2 only
+        "runtime":               runtime,
+        "time_brief":            None,
+        "time_generation":       None,
+        "time_photo_editor":     None,
+        "time_copywriter":       _dur("copywriter"),
+        "time_content_planner":  _dur("content_planner"),
+        "time_review_generator": _dur("review_generator"),
+        # API
+        "total_calls":       calls_text,
+        "calls_image_model": 0,
+        "calls_text_model":  calls_text,
+        "image_model_name":  None,
+        "text_model_name":   "Text model",
+        "total_cost":        0.0,
+        "cost_image_model":  0.0,
+        "cost_text_model":   0.0,
+        # Errors
+        "errors":            "0",
+        "errors_fixed":      "0",
+        "errors_flagged":    "0",
+        "errors_total":      0,
+        "pass_rate":         "—",
+        "plan_label":        plan_label,
+    }
+
+
 @app.route("/api/activity")
 def activity():
     events: list[dict] = []
@@ -1154,10 +1354,13 @@ def activity():
                         task_entry["shoot_link"] = f"/photoshoots/{shoot_id}"
                         task_entry["shoot_set"]  = int(set_num)
             elif mid == "sprint_report" and m["status"] == "completed":
-                if REPORTS_DIR.exists():
-                    task_entry["report_ready"] = any(
-                        f.name.endswith(".md") for f in REPORTS_DIR.iterdir()
-                    )
+                if _latest_report("photoshoot_"):
+                    task_entry["report_ready"] = True
+                    task_entry["report_type"]  = "photoshoot"
+            elif mid == "sprint_report_p2" and m["status"] == "completed":
+                if _latest_report("content_plan_"):
+                    task_entry["report_ready"] = True
+                    task_entry["report_type"]  = "content_plan"
             tasks.append(task_entry)
 
         # Live banner pinned at top when active
@@ -1317,7 +1520,7 @@ def app_status():
             if m["status"] == "failed" and not failed_step:
                 failed_step = m["label"]
             if m["id"] == "sprint_report" and m["status"] == "completed":
-                sprint_ready = True
+                sprint_ready = bool(_latest_report("photoshoot_"))
 
     completed_summary = None
     if run_status == "completed" and progress:
@@ -1349,12 +1552,15 @@ def app_status():
 
     return jsonify({
         "is_live":           is_live,
+        "p1_live":           process_manager.state    != 'idle',
+        "p2_live":           process_manager_p2.state != 'idle',
         "needs_review":      needs_review_count,
         "has_log_errors":    has_log_errors,
         "run_id":            run_id,
         "run_status":        run_status,
         "failed_step":       failed_step,
         "sprint_ready":      sprint_ready,
+        "sprint_ready_p2":   bool(_latest_report("content_plan_")),
         "completed_summary": completed_summary,
     })
 
@@ -1496,18 +1702,114 @@ def _parse_sprint_report_full(path: Path) -> dict:
         return {"error": str(e)}
 
 
-@app.route("/api/sprint-report")
-def sprint_report_endpoint():
+def _latest_report(prefix: str):
+    """Return the most recent report file matching the given prefix, or None."""
     if not REPORTS_DIR.exists():
-        return jsonify({"error": "No reports found"}), 404
-    reports = sorted(
-        [f for f in REPORTS_DIR.iterdir() if f.name.endswith(".md")],
+        return None
+    files = sorted(
+        [f for f in REPORTS_DIR.iterdir() if f.name.startswith(prefix) and f.name.endswith(".md")],
         key=lambda p: _file_dt(p.name) or "",
         reverse=True,
     )
-    if not reports:
-        return jsonify({"error": "No reports found"}), 404
-    return jsonify(_parse_sprint_report_full(reports[0]))
+    return files[0] if files else None
+
+
+@app.route("/api/photoshoot-report")
+def photoshoot_report_endpoint():
+    report = _latest_report("photoshoot_")
+    if not report:
+        return jsonify({"error": "No photoshoot report found"}), 404
+    return jsonify(_parse_sprint_report_full(report))
+
+
+@app.route("/api/content-plan-report")
+def content_plan_report_endpoint():
+    report = _latest_report("content_plan_")
+    if not report:
+        return jsonify({"error": "No content plan report found"}), 404
+    return jsonify(_parse_sprint_report_full(report))
+
+
+# ── Search ───────────────────────────────────────────────────────────────────
+
+@app.route("/api/search")
+def search():
+    q = request.args.get("q", "").strip().lower()
+    if len(q) < 2:
+        return jsonify({"shoots": [], "images": [], "posts": []})
+
+    out = {"shoots": [], "images": [], "posts": []}
+
+    # Shoots + images
+    if ASSET_DIR.exists():
+        for month_dir in sorted(ASSET_DIR.iterdir(), reverse=True):
+            if not month_dir.is_dir():
+                continue
+            for shoot_dir in sorted(month_dir.iterdir(), reverse=True):
+                if not shoot_dir.is_dir():
+                    continue
+                shoot_name = shoot_dir.name
+                month_name = month_dir.name
+                shoot_id   = f"{month_name}__{shoot_name}"
+
+                if q in shoot_name.lower() or q in month_name.lower():
+                    out["shoots"].append({
+                        "id":    shoot_id,
+                        "name":  shoot_name,
+                        "month": month_name,
+                        "url":   f"/photoshoots/{shoot_id}",
+                    })
+
+                catalog_path = shoot_dir / "catalog.json"
+                if catalog_path.exists() and len(out["images"]) < 20:
+                    try:
+                        catalog = json.loads(catalog_path.read_text())
+                        for img in catalog.get("images", []):
+                            fname = img.get("filename", "")
+                            ref   = img.get("ref_code", "")
+                            set_  = img.get("path", "").split("/")[-2] if "/" in img.get("path", "") else ""
+                            if q in fname.lower() or q in ref.lower() or q in set_.lower():
+                                out["images"].append({
+                                    "filename": fname,
+                                    "path":     img.get("path", ""),
+                                    "shoot_id": shoot_id,
+                                    "shoot":    shoot_name,
+                                    "month":    month_name,
+                                    "status":   img.get("status", ""),
+                                    "url":      f"/photoshoots/{shoot_id}",
+                                })
+                                if len(out["images"]) >= 20:
+                                    break
+                    except Exception:
+                        pass
+
+    out["shoots"] = out["shoots"][:10]
+
+    # Posts
+    calendar_path = CONTENT_DIR / "monthly_calendar.json"
+    if not calendar_path.exists():
+        calendar_path = CONTENT_DIR / "weekly_calendar.json"
+    if calendar_path.exists():
+        try:
+            cal = json.loads(calendar_path.read_text())
+            for post in cal.get("posts", []):
+                caption  = post.get("caption", "")
+                tags     = " ".join(post.get("hashtags", []))
+                date_str = post.get("date", "")
+                if q in caption.lower() or q in tags.lower() or q in date_str:
+                    out["posts"].append({
+                        "slot":    post.get("slot", ""),
+                        "date":    date_str,
+                        "type":    post.get("type", ""),
+                        "caption": caption[:120],
+                        "url":     "/content-planning",
+                    })
+                    if len(out["posts"]) >= 10:
+                        break
+        except Exception:
+            pass
+
+    return jsonify(out)
 
 
 # ── Run log ──────────────────────────────────────────────────────────────────
@@ -1704,6 +2006,72 @@ def content_posts():
     })
 
 
+@app.route("/api/content/posts/<int:slot>", methods=["PATCH"])
+def update_content_post(slot):
+    """Update caption and/or hashtags for a post by slot in monthly_calendar.json."""
+    calendar_path = CONTENT_DIR / "monthly_calendar.json"
+    if not calendar_path.exists():
+        calendar_path = CONTENT_DIR / "weekly_calendar.json"
+    if not calendar_path.exists():
+        return jsonify({"error": "No calendar file found"}), 404
+
+    body = request.get_json(force=True) or {}
+
+    try:
+        calendar = json.loads(calendar_path.read_text())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    post = next((p for p in calendar.get("posts", []) if p.get("slot") == slot), None)
+    if post is None:
+        return jsonify({"error": f"Post with slot {slot} not found"}), 404
+
+    if "caption" in body:
+        post["caption"] = body["caption"]
+    if "hashtags" in body:
+        ht = body["hashtags"]
+        if isinstance(ht, str):
+            ht = [t.strip() for t in ht.replace(",", " ").split() if t.strip()]
+        post["hashtags"] = ht
+
+    try:
+        calendar_path.write_text(json.dumps(calendar, indent=2, ensure_ascii=False))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"ok": True, "slot": slot})
+
+
+@app.route("/api/content/posts", methods=["DELETE"])
+def delete_content_posts():
+    """Delete one or more posts by slot from monthly_calendar.json."""
+    slots = set((request.get_json(force=True) or {}).get("slots", []))
+    if not slots:
+        return jsonify({"error": "No slots provided"}), 400
+
+    calendar_path = CONTENT_DIR / "monthly_calendar.json"
+    if not calendar_path.exists():
+        calendar_path = CONTENT_DIR / "weekly_calendar.json"
+    if not calendar_path.exists():
+        return jsonify({"error": "No calendar file found"}), 404
+
+    try:
+        calendar = json.loads(calendar_path.read_text())
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    before = len(calendar.get("posts", []))
+    calendar["posts"] = [p for p in calendar.get("posts", []) if p.get("slot") not in slots]
+    removed = before - len(calendar["posts"])
+
+    try:
+        calendar_path.write_text(json.dumps(calendar, indent=2, ensure_ascii=False))
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+    return jsonify({"ok": True, "removed": removed})
+
+
 # ── Brand / Org ──────────────────────────────────────────────────────────────
 
 def _parse_copy_strategy(text: str) -> dict:
@@ -1871,5 +2239,311 @@ def brand():
     return jsonify(result)
 
 
+REFS_DIR     = ROOT / "references"
+_IMAGE_EXTS  = {'.jpg', '.jpeg', '.png', '.webp', '.gif'}
+
+
+# ── Run management ────────────────────────────────────────────────────────────
+
+@app.route("/api/run/status")
+def run_status():
+    return jsonify(process_manager.status())
+
+
+@app.route("/api/run/start", methods=["POST"])
+def run_start():
+    body   = request.get_json(silent=True) or {}
+    config = body.get("config") or None
+    ok, info = process_manager.start(config)
+    if not ok:
+        return jsonify({"error": info}), 409
+    return jsonify({"pid": info})
+
+
+@app.route("/api/run/stop", methods=["POST"])
+def run_stop():
+    ok, msg = process_manager.stop()
+    if not ok:
+        return jsonify({"error": msg}), 409
+    return jsonify({"ok": True})
+
+
+@app.route("/api/run/pause", methods=["POST"])
+def run_pause():
+    ok, msg = process_manager.pause()
+    if not ok:
+        return jsonify({"error": msg}), 409
+    return jsonify({"ok": True})
+
+
+@app.route("/api/run/resume", methods=["POST"])
+def run_resume():
+    ok, msg = process_manager.resume()
+    if not ok:
+        return jsonify({"error": msg}), 409
+    return jsonify({"ok": True})
+
+
+@app.route("/api/run/logs/stream")
+def run_logs_stream():
+    def generate():
+        # Replay buffered lines first
+        for line in process_manager.get_buffer():
+            yield f"data: {json.dumps({'line': line})}\n\n"
+
+        # If not running/paused, close after buffer
+        if process_manager.state not in ('running', 'paused'):
+            yield f"data: {json.dumps({'done': True})}\n\n"
+            return
+
+        q = queue.Queue()
+        process_manager.subscribe(q)
+        try:
+            while True:
+                try:
+                    item = q.get(timeout=25)
+                    if item is None:  # end-of-stream sentinel
+                        yield f"data: {json.dumps({'done': True})}\n\n"
+                        return
+                    yield f"data: {json.dumps({'line': item})}\n\n"
+                except queue.Empty:
+                    yield ": keepalive\n\n"
+        finally:
+            process_manager.unsubscribe(q)
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ── Asset management ──────────────────────────────────────────────────────────
+
+def _asset_url(path: Path) -> str:
+    return f"/api/image?path={path}"
+
+
+def _list_folder(folder: Path) -> list[dict]:
+    if not folder.exists():
+        return []
+    return sorted(
+        [
+            {"filename": f.name, "path": str(f), "url": _asset_url(f)}
+            for f in folder.iterdir()
+            if f.is_file() and f.suffix.lower() in _IMAGE_EXTS
+        ],
+        key=lambda x: x["filename"],
+    )
+
+
+@app.route("/api/run/assets")
+def run_assets():
+    references = {}
+    for s in [1, 2, 3]:
+        references[str(s)] = _list_folder(REFS_DIR / f"Set{s}")
+    # Also include root references/ (Set 0)
+    root_refs = _list_folder(REFS_DIR)
+    if root_refs:
+        references["0"] = root_refs
+    return jsonify({
+        "references": references,
+        "products":   _list_folder(PRODUCTS_DIR),
+    })
+
+
+@app.route("/api/run/upload", methods=["POST"])
+def run_upload():
+    target = request.form.get("target", "")  # "references_1", "references_2", "references_3", "products"
+    files  = request.files.getlist("files")
+    if not target or not files:
+        return jsonify({"error": "target and files required"}), 400
+
+    if target.startswith("references_"):
+        set_num = target.split("_", 1)[1]
+        dest = REFS_DIR / f"Set{set_num}"
+    elif target == "products":
+        dest = PRODUCTS_DIR
+    else:
+        return jsonify({"error": "unknown target"}), 400
+
+    dest.mkdir(parents=True, exist_ok=True)
+    saved = []
+    for f in files:
+        if not f.filename:
+            continue
+        name = Path(f.filename).name
+        if Path(name).suffix.lower() not in _IMAGE_EXTS:
+            continue
+        out = dest / name
+        f.save(out)
+        saved.append({"filename": name, "path": str(out), "url": _asset_url(out)})
+
+    return jsonify({"saved": saved})
+
+
+@app.route("/api/run/delete-asset", methods=["POST"])
+def run_delete_asset():
+    body     = request.get_json(silent=True) or {}
+    target   = body.get("target", "")
+    filename = body.get("filename", "")
+    if not target or not filename:
+        return jsonify({"error": "target and filename required"}), 400
+
+    if target.startswith("references_"):
+        set_num = target.split("_", 1)[1]
+        path = REFS_DIR / f"Set{set_num}" / filename
+    elif target == "references_root":
+        path = REFS_DIR / filename
+    elif target == "products":
+        path = PRODUCTS_DIR / filename
+    else:
+        return jsonify({"error": "unknown target"}), 400
+
+    if not path.exists() or not path.is_file():
+        return jsonify({"error": "file not found"}), 404
+
+    # Safety check: must be within expected directory
+    try:
+        path.resolve().relative_to(ROOT.resolve())
+    except ValueError:
+        abort(403)
+
+    path.unlink()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/run/validate-name")
+def run_validate_name():
+    name    = request.args.get("name", "").strip()
+    season  = request.args.get("season", "").strip()
+    if not name:
+        return jsonify({"error": "name required"}), 400
+    # Build the same month folder that main.py would use
+    today   = datetime.today()
+    year    = season.split()[-1] if season else str(today.year)
+    import calendar as _cal
+    month_name   = _cal.month_name[today.month]
+    month_folder = ASSET_DIR / f"{month_name}{year}"
+    exists = (month_folder / name).exists()
+    # Suggest next shoot number by scanning ALL month folders globally
+    nums = []
+    if ASSET_DIR.exists():
+        for mdir in ASSET_DIR.iterdir():
+            if mdir.is_dir():
+                for sdir in mdir.iterdir():
+                    if sdir.is_dir() and sdir.name.startswith("Shoot") and sdir.name[5:].isdigit():
+                        nums.append(int(sdir.name[5:]))
+    next_num = max(nums) + 1 if nums else 1
+    suggestion = f"Shoot{next_num:02d}"
+    return jsonify({"exists": exists, "suggestion": suggestion})
+
+
+# ── Phase 2 — Content Pipeline ────────────────────────────────────────────────
+
+@app.route("/api/p2/shoots")
+def p2_shoots():
+    """List all available shoot folders, newest first (by mtime)."""
+    if not ASSET_DIR.exists():
+        return jsonify([])
+    shoots = []
+    for month_dir in ASSET_DIR.iterdir():
+        if not month_dir.is_dir():
+            continue
+        for shoot_dir in month_dir.iterdir():
+            if shoot_dir.is_dir() and shoot_dir.name.startswith("Shoot"):
+                path_str = f"{month_dir.name}/{shoot_dir.name}"
+                try:
+                    mtime = shoot_dir.stat().st_mtime
+                except OSError:
+                    mtime = 0
+                shoots.append({
+                    "path":  path_str,
+                    "name":  shoot_dir.name,
+                    "month": month_dir.name,
+                    "mtime": mtime,
+                })
+    shoots.sort(key=lambda s: s["mtime"], reverse=True)
+    for i, s in enumerate(shoots):
+        s["latest"] = (i == 0)
+        del s["mtime"]
+    return jsonify(shoots)
+
+
+@app.route("/api/p2/status")
+def p2_status():
+    return jsonify(process_manager_p2.status())
+
+
+@app.route("/api/p2/start", methods=["POST"])
+def p2_start():
+    body           = request.get_json(silent=True) or {}
+    shoot_folder   = body.get("shoot_folder", "").strip()
+    planning_month = body.get("planning_month", "").strip()   # "YYYY-MM"
+    env_extra = {}
+    if shoot_folder:
+        env_extra["SHOOT_FOLDER"] = shoot_folder
+    if planning_month:
+        env_extra["PLANNING_MONTH"] = planning_month
+    ok, info = process_manager_p2.start(script="main_phase2.py", env_extra=env_extra)
+    if not ok:
+        return jsonify({"error": info}), 409
+    return jsonify({"pid": info})
+
+
+@app.route("/api/p2/stop", methods=["POST"])
+def p2_stop():
+    ok, msg = process_manager_p2.stop()
+    if not ok:
+        return jsonify({"error": msg}), 409
+    return jsonify({"ok": True})
+
+
+@app.route("/api/p2/pause", methods=["POST"])
+def p2_pause():
+    ok, msg = process_manager_p2.pause()
+    if not ok:
+        return jsonify({"error": msg}), 409
+    return jsonify({"ok": True})
+
+
+@app.route("/api/p2/resume", methods=["POST"])
+def p2_resume():
+    ok, msg = process_manager_p2.resume()
+    if not ok:
+        return jsonify({"error": msg}), 409
+    return jsonify({"ok": True})
+
+
+@app.route("/api/p2/logs/stream")
+def p2_logs_stream():
+    def generate():
+        for line in process_manager_p2.get_buffer():
+            yield f"data: {json.dumps({'line': line})}\n\n"
+        if process_manager_p2.state not in ('running', 'paused'):
+            yield f"data: {json.dumps({'done': True})}\n\n"
+            return
+        q = queue.Queue()
+        process_manager_p2.subscribe(q)
+        try:
+            while True:
+                try:
+                    item = q.get(timeout=25)
+                    if item is None:
+                        yield f"data: {json.dumps({'done': True})}\n\n"
+                        return
+                    yield f"data: {json.dumps({'line': item})}\n\n"
+                except queue.Empty:
+                    yield ": keepalive\n\n"
+        finally:
+            process_manager_p2.unsubscribe(q)
+
+    return Response(
+        stream_with_context(generate()),
+        mimetype="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
 if __name__ == "__main__":
-    app.run(port=5001, debug=True)
+    app.run(port=5001, debug=True, use_reloader=False, threaded=True)

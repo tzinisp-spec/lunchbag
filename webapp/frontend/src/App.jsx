@@ -10,7 +10,10 @@ import PostScheduling from './pages/PostScheduling'
 import AgentDetail from './pages/AgentDetail'
 import Org from './pages/Org'
 import Logs from './pages/Logs'
-import SprintReport from './pages/SprintReport'
+import PhotoshootReport from './pages/PhotoshootReport'
+import ContentPlanReport from './pages/ContentPlanReport'
+import NewRun from './pages/NewRun'
+import ContentPipeline from './pages/ContentPipeline'
 
 export default function App() {
   return (
@@ -24,9 +27,12 @@ export default function App() {
             <Route path="/content-planning"        element={<ContentPlanning />} />
             <Route path="/post-scheduling"         element={<PostScheduling />} />
             <Route path="/agents/:agentId"         element={<AgentDetail />} />
+            <Route path="/run"                      element={<NewRun />} />
+            <Route path="/content-pipeline"        element={<ContentPipeline />} />
             <Route path="/org"                     element={<Org />} />
             <Route path="/logs"                    element={<Logs />} />
-            <Route path="/sprint-report"           element={<SprintReport />} />
+            <Route path="/photoshoot-report"        element={<PhotoshootReport />} />
+            <Route path="/content-plan-report"      element={<ContentPlanReport />} />
             <Route path="*"                        element={<Navigate to="/" replace />} />
           </Routes>
         </Shell>

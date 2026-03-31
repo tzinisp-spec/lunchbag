@@ -16,7 +16,34 @@ async function post(path, body) {
   return res.json()
 }
 
+async function del(path, body) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`)
+  return res.json()
+}
+
+async function patch(path, body) {
+  const res = await fetch(`${BASE}${path}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`)
+  return res.json()
+}
+
+async function upload(path, formData) {
+  const res = await fetch(`${BASE}${path}`, { method: 'POST', body: formData })
+  if (!res.ok) throw new Error(`API error ${res.status}: ${path}`)
+  return res.json()
+}
+
 export const api = {
+  search:         (q)                   => get(`/search?q=${encodeURIComponent(q)}`),
   dashboard:      ()                    => get('/dashboard'),
   shoots:         ()                    => get('/shoots'),
   shoot:          (id)                  => get(`/shoots/${id}`),
@@ -25,11 +52,45 @@ export const api = {
   approveImages:  (shootId, filenames)  => post(`/shoots/${shootId}/images/approve`, { filenames }),
   deleteImages:   (shootId, filenames)  => post(`/shoots/${shootId}/images/delete`,  { filenames }),
   contentPosts:   ()                    => get('/content/posts'),
+  updatePost:     (slot, body)          => patch(`/content/posts/${slot}`, body),
+  deletePosts:    (slots)               => del('/content/posts', { slots }),
   activity:       ()                    => get('/activity'),
   logs:           (lines = 500)         => get(`/logs?lines=${lines}`),
   status:         ()                    => get('/status'),
-  sprintReport:   ()                    => get('/sprint-report'),
+  photoshootReport:   ()                => get('/photoshoot-report'),
+  contentPlanReport:  ()                => get('/content-plan-report'),
   brand:          ()                    => get('/brand'),
   concept:        ()                    => get('/concept'),
   products:       ()                    => get('/products'),
+
+  // Run management
+  runStatus:      ()                    => get('/run/status'),
+  runStart:       (config)              => post('/run/start', { config }),
+  runStop:        ()                    => post('/run/stop', {}),
+  runPause:       ()                    => post('/run/pause', {}),
+  runResume:      ()                    => post('/run/resume', {}),
+  runLogsUrl:     ()                    => `${BASE}/run/logs/stream`,
+
+  // Phase 2 — Content Pipeline
+  p2Status:      ()                    => get('/p2/status'),
+  p2Start:       (body)                => post('/p2/start', body),
+  p2Stop:        ()                    => post('/p2/stop', {}),
+  p2Pause:       ()                    => post('/p2/pause', {}),
+  p2Resume:      ()                    => post('/p2/resume', {}),
+  p2LogsUrl:     ()                    => `${BASE}/p2/logs/stream`,
+  p2Shoots:      ()                    => get('/p2/shoots'),
+
+  // Asset management
+  runAssets:      ()                    => get('/run/assets'),
+  runUpload:      (target, files)       => {
+    const fd = new FormData()
+    fd.append('target', target)
+    files.forEach(f => fd.append('files', f))
+    return upload('/run/upload', fd)
+  },
+  runDeleteAsset:   (target, filename)    => post('/run/delete-asset', { target, filename }),
+  runValidateName:  (name, season)        => get(`/run/validate-name?name=${encodeURIComponent(name)}&season=${encodeURIComponent(season)}`),
+  runConfigGet:     ()                    => get('/run/config'),
+  runConfigSave:    (config)              => post('/run/config', config),
+  conceptSave:      (text)               => post('/concept', { text }),
 }

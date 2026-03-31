@@ -3,14 +3,14 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, CheckCircle, AlertTriangle, XCircle } from 'lucide-react'
 import { api } from '../lib/api'
 
-export default function SprintReport() {
+export default function PhotoshootReport() {
   const navigate    = useNavigate()
   const [data,    setData]    = useState(null)
   const [loading, setLoading] = useState(true)
   const [error,   setError]   = useState(null)
 
   useEffect(() => {
-    api.sprintReport()
+    api.photoshootReport()
       .then(setData)
       .catch(e => setError(e.message))
       .finally(() => setLoading(false))
@@ -27,7 +27,7 @@ export default function SprintReport() {
       <button onClick={() => navigate(-1)} className="flex items-center gap-2 text-[var(--c-text-3)] hover:text-[var(--c-text-1)] text-sm mb-6 transition-colors">
         <ArrowLeft size={16} /> Back
       </button>
-      <div className="text-[var(--c-text-3)]">No sprint report available yet.</div>
+      <div className="text-[var(--c-text-3)]">No photoshoot report available yet.</div>
     </div>
   )
 
@@ -44,7 +44,7 @@ export default function SprintReport() {
 
       {/* Header */}
       <div className="mb-8">
-        <p className="text-xs text-[var(--c-text-3)] uppercase tracking-wider mb-1">Sprint Report</p>
+        <p className="text-xs text-[var(--c-text-3)] uppercase tracking-wider mb-1">Photoshoot Report</p>
         <h1 className="text-xl text-[var(--c-text-1)] font-semibold font-mono">{data.sprint_id || 'Unknown Sprint'}</h1>
         <div className="flex items-center gap-4 mt-2 text-xs text-[var(--c-text-3)]">
           {data.date && <span>{data.date}</span>}

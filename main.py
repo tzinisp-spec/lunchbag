@@ -22,7 +22,6 @@ from lunchbag.tools.catalog_utils import CatalogSyncWatcher
 load_dotenv()
 
 TOTAL_SETS = 3
-IMAGE_DISTRIBUTION = {1: 17, 2: 17, 3: 16}
 MAX_STEP_ATTEMPTS  = 3
 RETRY_DELAY        = 10   # seconds between step retries
 
@@ -298,12 +297,19 @@ def create_shoot_folder() -> tuple[str, str]:
     base_dir = Path("asset_library/images") / month_folder
     base_dir.mkdir(parents=True, exist_ok=True)
 
-    existing = sorted([
-        d for d in base_dir.iterdir()
-        if d.is_dir() and d.name.startswith("Shoot")
-    ])
-    next_num   = len(existing) + 1
+    all_shoot_dirs = Path("asset_library/images")
+    nums = []
+    if all_shoot_dirs.exists():
+        for mdir in all_shoot_dirs.iterdir():
+            if mdir.is_dir():
+                for sdir in mdir.iterdir():
+                    if sdir.is_dir() and sdir.name.startswith("Shoot") and sdir.name[5:].isdigit():
+                        nums.append(int(sdir.name[5:]))
+    next_num = max(nums) + 1 if nums else 1
     shoot_name = f"Shoot{next_num:02d}"
+    # Use custom name if provided via run config
+    if INPUTS.get("shoot_name"):
+        shoot_name = INPUTS["shoot_name"]
     (base_dir / shoot_name).mkdir(exist_ok=True)
 
     shoot_folder = f"{month_folder}/{shoot_name}"
@@ -315,13 +321,10 @@ def create_shoot_folder() -> tuple[str, str]:
 def get_images_per_set(
     total: int, sets: int, set_num: int
 ) -> int:
-    if sets == 3:
-        return IMAGE_DISTRIBUTION.get(set_num, 17)
+    """Distribute total images across sets, giving remainder to first sets."""
     base      = total // sets
     remainder = total % sets
-    if set_num == sets:
-        return base + remainder
-    return base
+    return base + (1 if set_num <= remainder else 0)
 
 
 # ── Regen pass ───────────────────────────────────────────
@@ -498,6 +501,41 @@ def run():
     os.makedirs("asset_library/images", exist_ok=True)
     os.makedirs("references",           exist_ok=True)
 
+    # ── Load persistent shoot config (edited via webapp) ─────────────
+    _shoot_cfg_path = Path("lunchbag") / "config" / "shoot_config.json"
+    if _shoot_cfg_path.exists():
+        try:
+            INPUTS.update({k: v for k, v in json.loads(_shoot_cfg_path.read_text()).items() if k in INPUTS})
+        except Exception:
+            pass
+
+    # ── Apply per-run overrides (written by process_manager at start) ─
+    _config_path = Path("outputs") / "run_config.json"
+    if _config_path.exists():
+        try:
+            _overrides = json.loads(_config_path.read_text())
+            INPUTS.update({k: v for k, v in _overrides.items() if k in INPUTS})
+            _config_path.unlink()  # consume once
+        except Exception:
+            pass
+    # Always use today's date for month/day; auto-derive season
+    from datetime import date as _date
+    INPUTS["shoot_month"] = _date.today().strftime("%m")
+    INPUTS["shoot_day"]   = _date.today().strftime("%d")
+    _month = int(INPUTS["shoot_month"])
+    _year  = _date.today().year
+    _season_name = ("Winter" if _month in (12, 1, 2) else
+                    "Spring" if _month in (3, 4, 5) else
+                    "Summer" if _month in (6, 7, 8) else "Autumn")
+    INPUTS["current_season"] = f"{_season_name} {_year}"
+
+    # ── Compute image distribution and inject into INPUTS ─────────────
+    _total = int(INPUTS.get("images_per_sprint", 50))
+    IMAGE_DISTRIBUTION = {s: get_images_per_set(_total, TOTAL_SETS, s) for s in range(1, TOTAL_SETS + 1)}
+    INPUTS["images_set_1"] = str(IMAGE_DISTRIBUTION[1])
+    INPUTS["images_set_2"] = str(IMAGE_DISTRIBUTION[2])
+    INPUTS["images_set_3"] = str(IMAGE_DISTRIBUTION[3])
+
     # ── Create shoot folder ──────────────────────────
     shoot_folder, shoot_name = create_shoot_folder()
     print(
@@ -532,7 +570,7 @@ def run():
     tracker.start_run(shoot_id, PHASE1_MILESTONES)
     tracker.set_meta(
         shoot_folder=shoot_folder,
-        set_expected=IMAGE_DISTRIBUTION,   # {1: 17, 2: 17, 3: 16}
+        set_expected=IMAGE_DISTRIBUTION,
     )
 
     # ── Reset API counters for this sprint ───────────

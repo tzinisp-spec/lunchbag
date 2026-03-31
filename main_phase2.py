@@ -13,7 +13,7 @@ from lunchbag.tools.content_planner_tool import ContentPlannerTool
 from lunchbag.tools.review_generator_tool import ReviewGeneratorTool
 from lunchbag.tools.sprint_reporter_tool import SprintReporterTool
 from lunchbag.tools.catalog_utils import sync_catalog
-from lunchbag.tools.progress_tracker import ProgressTracker
+from lunchbag.tools.progress_tracker import ProgressTracker, PROGRESS_P2_PATH
 from lunchbag.tools.run_logger import RunLogger
 
 MAX_STEP_ATTEMPTS = 3
@@ -156,6 +156,7 @@ def run():
         or get_latest_shoot()
     )
     os.environ["SHOOT_FOLDER"] = SHOOT_FOLDER
+    os.environ["REPORT_TYPE"]  = "content_planning"
     print(f"[Phase 2] Using shoot: {SHOOT_FOLDER}")
 
     print("\n" + "="*60)
@@ -167,8 +168,9 @@ def run():
     logger = RunLogger()
     logger.start()
 
-    tracker = ProgressTracker()
-    tracker.resume_run(PHASE2_MILESTONES)
+    tracker = ProgressTracker(path=PROGRESS_P2_PATH)
+    tracker.start_run(f"Phase2-{SHOOT_FOLDER.replace('/', '_')}", PHASE2_MILESTONES)
+    tracker.set_meta(shoot_folder=SHOOT_FOLDER, phase="content_planning")
 
     # ── Catalog resync ────────────────────────────
     # Rebuilds catalog.json from actual files on disk

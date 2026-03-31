@@ -30,6 +30,10 @@ def _get_asset_dir() -> Path:
 OUTPUTS_DIR = Path("outputs")
 REPORTS_DIR = Path("outputs/sprint_reports")
 
+def _report_type() -> str:
+    """Return 'photoshoot' or 'content_planning' based on env var."""
+    return os.getenv("REPORT_TYPE", "photoshoot").strip().lower()
+
 
 def _get_catalog_path() -> Path:
     shoot_folder = os.getenv("SHOOT_FOLDER", "")
@@ -877,8 +881,10 @@ class SprintReporterTool(BaseTool):
                 "final_approval": "Final Approval",
             }
 
+            rtype       = _report_type()
+            report_title = "PHOTOSHOOT REPORT" if rtype == "photoshoot" else "CONTENT PLANNING REPORT"
             report = (
-                f"# SPRINT REPORT — THE LUNCHBAGS\n"
+                f"# {report_title} — THE LUNCHBAGS\n"
                 f"Sprint: {sprint_id}\n"
                 f"Date: {now.strftime('%Y-%m-%d')}\n\n"
                 f"{'='*55}\n"
@@ -1130,10 +1136,12 @@ class SprintReporterTool(BaseTool):
             for rec in recommendations: report += f"- {rec}\n"
 
             REPORTS_DIR.mkdir(parents=True, exist_ok=True)
-            timestamp   = now.strftime("%Y%m%d_%H%M")
-            report_path = REPORTS_DIR / f"sprint_{sprint_id}_{timestamp}.md"
+            timestamp    = now.strftime("%Y%m%d_%H%M")
+            file_prefix  = "photoshoot" if rtype == "photoshoot" else "content_plan"
+            report_path  = REPORTS_DIR / f"{file_prefix}_{sprint_id}_{timestamp}.md"
+            latest_name  = "photoshoot_report_latest.md" if rtype == "photoshoot" else "content_plan_report_latest.md"
             report_path.write_text(report)
-            (OUTPUTS_DIR / "sprint_report_latest.md").write_text(report)
+            (OUTPUTS_DIR / latest_name).write_text(report)
 
             return f"Sprint Report saved to {report_path}"
 

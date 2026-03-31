@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 PROGRESS_PATH = Path("outputs/run_progress.json")
+PROGRESS_P2_PATH = Path("outputs/run_progress_p2.json")
 
 
 def _fmt(seconds) -> str:
@@ -44,7 +45,8 @@ class ProgressTracker:
         ...
     """
 
-    def __init__(self):
+    def __init__(self, path: Path | None = None):
+        self._path: Path = Path(path) if path else PROGRESS_PATH
         self._data: dict = {}
 
     # ── Lifecycle ─────────────────────────────────────────────────────────────
@@ -78,9 +80,9 @@ class ProgressTracker:
         For Phase 2: read the existing progress file and append new milestones.
         If no file exists, starts a fresh run.
         """
-        if PROGRESS_PATH.exists():
+        if self._path.exists():
             try:
-                self._data = json.loads(PROGRESS_PATH.read_text())
+                self._data = json.loads(self._path.read_text())
                 self._data["status"] = "in_progress"
                 existing = {m["id"] for m in self._data["milestones"]}
                 for m in milestones:
@@ -181,7 +183,7 @@ class ProgressTracker:
 
     def _save(self) -> None:
         """Atomic write — prevents the webapp reading a half-written file."""
-        PROGRESS_PATH.parent.mkdir(parents=True, exist_ok=True)
-        tmp = PROGRESS_PATH.with_suffix(".tmp")
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = self._path.with_suffix(".tmp")
         tmp.write_text(json.dumps(self._data, indent=2))
-        tmp.rename(PROGRESS_PATH)
+        tmp.rename(self._path)

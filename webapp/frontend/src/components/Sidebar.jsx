@@ -1,7 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, Camera, Calendar, CalendarDays,
-  Bot, Search, Building2, PanelLeftClose, PanelLeftOpen, X, Terminal,
+  Bot, Search, Building2, PanelLeftClose, PanelLeftOpen, X, Terminal, Wand2,
 } from 'lucide-react'
 import { AGENTS } from '../lib/agents'
 
@@ -9,8 +9,10 @@ const navBase   = 'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transiti
 const navActive = `bg-[var(--c-nav-active-bg)] text-[var(--c-nav-active-text)]`
 const navIdle   = `text-[var(--c-text-2)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-surface-2)]`
 
-export default function Sidebar({ collapsed, onToggle, onClose, appStatus }) {
+export default function Sidebar({ collapsed, onToggle, onClose, appStatus, onSearch }) {
   const isLive      = appStatus?.is_live        ?? false
+  const p1Live      = appStatus?.p1_live        ?? false
+  const p2Live      = appStatus?.p2_live        ?? false
   const needsReview = appStatus?.needs_review   ?? 0
   const hasErrors   = appStatus?.has_log_errors ?? false
 
@@ -21,12 +23,15 @@ export default function Sidebar({ collapsed, onToggle, onClose, appStatus }) {
       <div className="flex items-center justify-between px-4 py-4 border-b border-[var(--c-border)]">
         <div className="flex items-center gap-2 min-w-0">
           <div className="w-8 h-8 bg-[var(--c-icon-box)] rounded-lg flex items-center justify-center shrink-0">
-            <span className="text-[var(--c-text-1)] font-bold text-xs">LB</span>
+            <span className="text-[var(--c-text-1)] font-bold text-xs">C</span>
           </div>
-          <span className="text-[var(--c-text-1)] font-medium text-sm truncate">Lunchbag</span>
+          <span className="text-[var(--c-text-1)] font-medium text-sm truncate">COMAP</span>
         </div>
         <div className="flex items-center gap-1 shrink-0">
-          <Search size={15} className="text-[var(--c-text-3)] cursor-pointer hover:text-[var(--c-text-1)]" />
+          <button onClick={onSearch} className="flex items-center gap-1.5 rounded px-1.5 py-1 text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-surface-2)] transition-colors" title="Search  ⌘K">
+            <Search size={14} />
+            <span className="text-[10px] font-mono bg-[var(--c-surface-2)] px-1 py-0.5 rounded text-[9px] leading-none">⌘K</span>
+          </button>
           <button
             onClick={onToggle}
             className="hidden md:flex w-6 h-6 items-center justify-center rounded text-[var(--c-text-3)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-surface-2)] transition-colors ml-1"
@@ -51,6 +56,36 @@ export default function Sidebar({ collapsed, onToggle, onClose, appStatus }) {
           <LayoutDashboard size={16} />
           <span className="flex-1">Dashboard</span>
           {isLive && <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" title="Pipeline running" />}
+        </NavLink>
+
+        <NavLink
+          to="/run"
+          className={({ isActive }) =>
+            `flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors mt-1 ${
+              isActive
+                ? 'bg-green-600 text-white'
+                : 'bg-green-600/15 text-green-400 border border-green-500/30 hover:bg-green-600/25'
+            }`
+          }
+        >
+          <Camera size={14} />
+          <span className="flex-1">New Shoot</span>
+          {p1Live && <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" />}
+        </NavLink>
+
+        <NavLink
+          to="/content-pipeline"
+          className={({ isActive }) =>
+            `flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors mt-1 mb-1 ${
+              isActive
+                ? 'bg-blue-600 text-white'
+                : 'bg-blue-600/15 text-blue-400 border border-blue-500/30 hover:bg-blue-600/25'
+            }`
+          }
+        >
+          <Wand2 size={14} />
+          <span className="flex-1">New Content Planning</span>
+          {p2Live && <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shrink-0" />}
         </NavLink>
 
         <div className="pt-4 pb-1 px-3">
