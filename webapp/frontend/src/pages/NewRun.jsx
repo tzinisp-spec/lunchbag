@@ -79,6 +79,15 @@ export default function NewRun() {
   const state    = runStatus?.state ?? 'idle'
   const isActive = state === 'running' || state === 'paused'
 
+  // Collapse and lock all sections when a run starts
+  useEffect(() => {
+    if (isActive) {
+      setAssetsOpen(false)
+      setConceptOpen(false)
+      setAdvancedOpen(false)
+    }
+  }, [isActive])
+
   // ── Poll run status ────────────────────────────────────────────────────────
   const fetchStatus = useCallback(() => {
     api.runStatus()
@@ -304,7 +313,7 @@ export default function NewRun() {
       )}
 
       {/* ── Shoot Identity ── */}
-      <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-xl p-5 mb-4">
+      <div className={`bg-[var(--c-surface)] border border-[var(--c-border)] rounded-xl p-5 mb-4 ${isActive ? 'opacity-60' : ''}`}>
         <p className="text-xs text-[var(--c-text-3)] uppercase tracking-wider mb-4">Shoot Identity</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <Field label="Shoot Name">
@@ -351,6 +360,7 @@ export default function NewRun() {
         icon={<ImageIcon size={14} />}
         open={assetsOpen}
         onToggle={() => setAssetsOpen(o => !o)}
+        disabled={isActive}
         className="mb-4"
       >
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -374,6 +384,7 @@ export default function NewRun() {
         icon={<Package size={14} />}
         open={assetsOpen}
         onToggle={() => setAssetsOpen(o => !o)}
+        disabled={isActive}
         className="mb-4"
       >
         <AssetSet
@@ -392,6 +403,7 @@ export default function NewRun() {
         icon={<FileText size={14} />}
         open={conceptOpen}
         onToggle={() => setConceptOpen(o => !o)}
+        disabled={isActive}
         className="mb-4"
         badge={<SavedBadge visible={conceptSaved} inline />}
       >
@@ -415,6 +427,7 @@ export default function NewRun() {
         icon={<Settings size={14} />}
         open={advancedOpen}
         onToggle={() => setAdvancedOpen(o => !o)}
+        disabled={isActive}
         className="mb-6"
         badge={<SavedBadge visible={configSaved} inline />}
       >
@@ -474,12 +487,13 @@ function SavedBadge({ visible, inline = false }) {
   )
 }
 
-function Section({ title, icon, open, onToggle, children, className = '', badge }) {
+function Section({ title, icon, open, onToggle, disabled = false, children, className = '', badge }) {
   return (
-    <div className={`bg-[var(--c-surface)] border border-[var(--c-border)] rounded-xl overflow-hidden ${className}`}>
+    <div className={`bg-[var(--c-surface)] border border-[var(--c-border)] rounded-xl overflow-hidden ${disabled ? 'opacity-60' : ''} ${className}`}>
       <button
-        onClick={onToggle}
-        className="w-full flex items-center gap-2 px-5 py-3.5 text-left hover:bg-[var(--c-surface-2)] transition-colors border-b border-[var(--c-border)]"
+        onClick={disabled ? undefined : onToggle}
+        disabled={disabled}
+        className={`w-full flex items-center gap-2 px-5 py-3.5 text-left transition-colors border-b border-[var(--c-border)] ${disabled ? 'cursor-not-allowed' : 'hover:bg-[var(--c-surface-2)]'}`}
       >
         {icon && <span className="text-[var(--c-text-3)]">{icon}</span>}
         <span className="text-xs font-medium text-[var(--c-text-2)] uppercase tracking-wider flex-1">{title}</span>

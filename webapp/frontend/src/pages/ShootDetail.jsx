@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, X, Check, Download, Tag, Trash2, CheckSquare, MoreHorizontal } from 'lucide-react'
 import { api } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import StatusBadge from '../components/StatusBadge'
 import ImageLightbox from '../components/ImageLightbox'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -32,6 +33,8 @@ export default function ShootDetail() {
   const [confirm, setConfirm] = useState(null)   // { type, filenames }
   const [working, setWorking] = useState(false)
   const { addToast } = useToast()
+  const { auth } = useAuth()
+  const isAdmin = auth?.role === 'admin'
 
   // ── Load ──────────────────────────────────────────────────
   const refresh = useCallback(() => {
@@ -203,8 +206,8 @@ export default function ShootDetail() {
         <StatusBadge status={shoot.status} dot />
       </div>
 
-      {/* ── 5 metric tiles ── */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
+      {/* ── 5 metric tiles (admin only) ── */}
+      {isAdmin && <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4 mb-8">
 
         {/* Produced Images */}
         <DetailTile
@@ -263,7 +266,7 @@ export default function ShootDetail() {
           ]}
         />
 
-      </div>
+      </div>}
 
       {/* Per-set breakdown */}
       {setNums.length > 0 && (

@@ -14,8 +14,11 @@ export default function LoginPage() {
     setLoading(true)
     try {
       await login(username.trim(), password)
-    } catch {
-      setError('Invalid username or password.')
+    } catch (e) {
+      const msg = e?.message ?? ''
+      setError(msg.includes('401')
+        ? 'Invalid username or password.'
+        : 'Cannot connect to server. Make sure it is running.')
     } finally {
       setLoading(false)
     }

@@ -57,6 +57,8 @@ export const api = {
   dashboard:      ()                    => get('/dashboard'),
   shoots:         ()                    => get('/shoots'),
   shoot:          (id)                  => get(`/shoots/${id}`),
+  renameShoot:    (id, name)            => patch(`/shoots/${id}/rename`, { name }),
+  deleteShoots:   (shoot_ids)           => del('/shoots', { shoot_ids }),
   agents:         ()                    => get('/agents'),
   imageUrl:       (path)                => `${BASE}/image?path=${encodeURIComponent(path)}`,
   approveImages:  (shootId, filenames)  => post(`/shoots/${shootId}/images/approve`, { filenames }),

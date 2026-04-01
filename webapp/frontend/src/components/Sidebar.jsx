@@ -10,12 +10,20 @@ const navBase   = 'flex items-center gap-3 px-3 py-2 rounded-lg text-sm transiti
 const navActive = `bg-[var(--c-nav-active-bg)] text-[var(--c-nav-active-text)]`
 const navIdle   = `text-[var(--c-text-2)] hover:text-[var(--c-text-1)] hover:bg-[var(--c-surface-2)]`
 
+function NavSpinner({ color = 'green' }) {
+  const borderColor = color === 'blue' ? 'border-t-blue-400' : 'border-t-green-400'
+  return (
+    <span className={`w-3 h-3 rounded-full border-2 border-[var(--c-border)] ${borderColor} animate-spin shrink-0`} />
+  )
+}
+
 export default function Sidebar({ collapsed, onToggle, onClose, appStatus, onSearch, role }) {
   const isLive      = appStatus?.is_live        ?? false
   const p1Live      = appStatus?.p1_live        ?? false
   const p2Live      = appStatus?.p2_live        ?? false
   const needsReview = appStatus?.needs_review   ?? 0
   const hasErrors   = appStatus?.has_log_errors ?? false
+  const activeAgent = appStatus?.active_agent   ?? null
   const isAdmin     = role === 'admin'
   const { logout }  = useAuth()
   const navigate    = useNavigate()
@@ -65,7 +73,7 @@ export default function Sidebar({ collapsed, onToggle, onClose, appStatus, onSea
           <NavLink to="/" end className={({ isActive }) => `${navBase} ${isActive ? navActive : navIdle}`}>
             <LayoutDashboard size={16} />
             <span className="flex-1">Dashboard</span>
-            {isLive && <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" title="Pipeline running" />}
+            {isLive && <NavSpinner />}
           </NavLink>
         )}
 
@@ -82,7 +90,7 @@ export default function Sidebar({ collapsed, onToggle, onClose, appStatus, onSea
           >
             <Camera size={14} />
             <span className="flex-1">New Shoot</span>
-            {p1Live && <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" />}
+            {p1Live && <NavSpinner />}
           </NavLink>
         )}
 
@@ -99,7 +107,7 @@ export default function Sidebar({ collapsed, onToggle, onClose, appStatus, onSea
           >
             <Wand2 size={14} />
             <span className="flex-1">New Content Planning</span>
-            {p2Live && <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse shrink-0" />}
+            {p2Live && <NavSpinner color="blue" />}
           </NavLink>
         )}
 
@@ -134,7 +142,8 @@ export default function Sidebar({ collapsed, onToggle, onClose, appStatus, onSea
           <NavLink to="/logs" className={({ isActive }) => `${navBase} ${isActive ? navActive : navIdle}`}>
             <Terminal size={15} />
             <span className="flex-1">Run Log</span>
-            {hasErrors && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" title="Errors in log" />}
+            {isLive && <NavSpinner />}
+            {!isLive && hasErrors && <span className="w-2 h-2 rounded-full bg-red-500 shrink-0" title="Errors in log" />}
           </NavLink>
         )}
 
@@ -147,6 +156,7 @@ export default function Sidebar({ collapsed, onToggle, onClose, appStatus, onSea
               <NavLink key={agent.id} to={`/agents/${agent.id}`} className={({ isActive }) => `${navBase} ${isActive ? navActive : navIdle}`}>
                 <Bot size={15} />
                 <span className="flex-1 truncate">{agent.name}</span>
+                {activeAgent === agent.id && <NavSpinner />}
               </NavLink>
             ))}
 

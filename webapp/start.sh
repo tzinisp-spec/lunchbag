@@ -12,7 +12,10 @@ echo "Project root: $ROOT"
 # Install Python deps if needed
 if ! "$ROOT/test_env/bin/python3" -c "import flask" 2>/dev/null; then
   echo "Installing Python dependencies..."
-  "$ROOT/test_env/bin/pip" install flask flask-cors -q
+  "$ROOT/test_env/bin/pip" install flask flask-cors python-dotenv -q
+fi
+if ! "$ROOT/test_env/bin/python3" -c "import dotenv" 2>/dev/null; then
+  "$ROOT/test_env/bin/pip" install python-dotenv -q
 fi
 
 # Install JS deps if needed

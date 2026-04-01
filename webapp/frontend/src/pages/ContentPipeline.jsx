@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Play, Square, Pause, RotateCcw, ChevronDown, CheckCircle, ArrowRight, AlertTriangle } from 'lucide-react'
+import { Play, Square, Pause, RotateCcw, ChevronDown, ChevronUp, CheckCircle, ArrowRight, AlertTriangle, Settings } from 'lucide-react'
 import { api } from '../lib/api'
 import { useToast } from '../lib/toast'
 import ConfirmDialog from '../components/ConfirmDialog'
@@ -69,6 +69,9 @@ export default function ContentPipeline() {
   const [plannedMonths,   setPlannedMonths]   = useState(new Set())   // Set of "YYYY-MM"
   const [confirmOverwrite, setConfirmOverwrite] = useState(false)
 
+  // Config accordion
+  const [configOpen, setConfigOpen] = useState(true)
+
   // Log terminal
   const [lines, setLines] = useState([])
   const logRef  = useRef(null)
@@ -76,6 +79,11 @@ export default function ContentPipeline() {
 
   const state    = runStatus?.state ?? 'idle'
   const isActive = state === 'running' || state === 'paused'
+
+  // Collapse and lock config when a run starts
+  useEffect(() => {
+    if (isActive) setConfigOpen(false)
+  }, [isActive])
 
   // ── Poll run status ──────────────────────────────────────────────────────
   const fetchStatus = useCallback(() => {
@@ -314,9 +322,17 @@ export default function ContentPipeline() {
       </div>
 
       {/* ── Configuration ── */}
-      <div className="bg-[var(--c-surface)] border border-[var(--c-border)] rounded-xl p-5 mb-6">
-        <p className="text-xs text-[var(--c-text-3)] uppercase tracking-wider mb-4">Configuration</p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+      <div className={`bg-[var(--c-surface)] border border-[var(--c-border)] rounded-xl overflow-hidden mb-6 ${isActive ? 'opacity-60' : ''}`}>
+        <button
+          onClick={isActive ? undefined : () => setConfigOpen(o => !o)}
+          disabled={isActive}
+          className={`w-full flex items-center gap-2 px-5 py-3.5 text-left transition-colors border-b border-[var(--c-border)] ${isActive ? 'cursor-not-allowed' : 'hover:bg-[var(--c-surface-2)]'}`}
+        >
+          <Settings size={14} className="text-[var(--c-text-3)]" />
+          <span className="text-xs font-medium text-[var(--c-text-2)] uppercase tracking-wider flex-1">Configuration</span>
+          {configOpen ? <ChevronUp size={13} className="text-[var(--c-text-4)]" /> : <ChevronDown size={13} className="text-[var(--c-text-4)]" />}
+        </button>
+        {configOpen && <div className="p-5"><div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
 
           {/* Shoot selector */}
           <div>
@@ -384,7 +400,7 @@ export default function ContentPipeline() {
             )}
           </div>
 
-        </div>
+        </div></div>}
       </div>
 
       {/* ── Start button ── */}

@@ -8,10 +8,12 @@ import os
 import queue
 import re
 from functools import wraps
-from dotenv import load_dotenv
-
-load_dotenv()
 from pathlib import Path
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / '.env')
+except ImportError:
+    pass  # dotenv not installed — env vars must be set manually
 from datetime import datetime
 from flask import Flask, jsonify, send_file, request, abort, Response, stream_with_context, session
 from flask_cors import CORS
@@ -505,6 +507,13 @@ def dashboard():
     progress    = _read_progress()
     progress_p2 = _read_progress_p2()
 
+    if progress and progress.get("status") in ("in_progress", "paused") and process_manager.state == 'idle':
+        _mark_progress_stopped(PROGRESS_PATH)
+        progress = _read_progress()
+    if progress_p2 and progress_p2.get("status") in ("in_progress", "paused") and process_manager_p2.state == 'idle':
+        _mark_progress_stopped(PROGRESS_P2_PATH)
+        progress_p2 = _read_progress_p2()
+
     p1_is_live = bool(progress    and progress.get("status")    == "in_progress")
     p2_is_live = bool(progress_p2 and progress_p2.get("status") == "in_progress")
 
@@ -544,6 +553,86 @@ def dashboard():
 @app.route("/api/shoots")
 def shoots_list():
     return jsonify(_all_shoots())
+
+
+def _require_admin():
+    """Return a 403 response if the current session is not admin, else None."""
+    if session.get('role') != 'admin':
+        return jsonify({'error': 'Forbidden'}), 403
+    return None
+
+
+@app.route("/api/shoots/<path:shoot_id>/rename", methods=["PATCH"])
+def rename_shoot(shoot_id):
+    err = _require_admin()
+    if err: return err
+
+    parts = shoot_id.split("__")
+    if len(parts) != 2:
+        abort(400)
+    month_name, shoot_name = parts
+    shoot_dir = ASSET_DIR / month_name / shoot_name
+    if not shoot_dir.exists():
+        abort(404)
+
+    data     = request.get_json() or {}
+    new_name = data.get("name", "").strip()
+    if not new_name:
+        return jsonify({"error": "Name cannot be empty"}), 400
+    if not re.match(r'^[\w\-]+$', new_name):
+        return jsonify({"error": "Name can only contain letters, numbers, hyphens and underscores"}), 400
+    if new_name == shoot_name:
+        return jsonify({"id": shoot_id, "name": shoot_name})
+
+    new_shoot_dir = ASSET_DIR / month_name / new_name
+    if new_shoot_dir.exists():
+        return jsonify({"error": f"A shoot named '{new_name}' already exists in {month_name}"}), 409
+
+    # Update catalog.json paths before renaming the folder
+    catalog_path = shoot_dir / "catalog.json"
+    if catalog_path.exists():
+        try:
+            catalog = json.loads(catalog_path.read_text())
+            for img in catalog.get("images", []):
+                if img.get("shoot") == shoot_name:
+                    img["shoot"] = new_name
+                if "path" in img:
+                    img["path"] = img["path"].replace(f"/{shoot_name}/", f"/{new_name}/")
+            catalog_path.write_text(json.dumps(catalog, indent=2))
+        except Exception as e:
+            return jsonify({"error": f"Failed to update catalog: {e}"}), 500
+
+    shoot_dir.rename(new_shoot_dir)
+    return jsonify({"id": f"{month_name}__{new_name}", "name": new_name})
+
+
+@app.route("/api/shoots", methods=["DELETE"])
+def delete_shoots():
+    err = _require_admin()
+    if err: return err
+
+    import shutil
+    data      = request.get_json() or {}
+    shoot_ids = data.get("shoot_ids", [])
+    if not shoot_ids:
+        return jsonify({"error": "No shoot_ids provided"}), 400
+
+    deleted, errors = [], []
+    for shoot_id in shoot_ids:
+        parts = shoot_id.split("__")
+        if len(parts) != 2:
+            errors.append({"id": shoot_id, "error": "Invalid ID"}); continue
+        month_name, shoot_name = parts
+        shoot_dir = ASSET_DIR / month_name / shoot_name
+        if not shoot_dir.exists():
+            errors.append({"id": shoot_id, "error": "Not found"}); continue
+        try:
+            shutil.rmtree(shoot_dir)
+            deleted.append(shoot_id)
+        except Exception as e:
+            errors.append({"id": shoot_id, "error": str(e)})
+
+    return jsonify({"deleted": deleted, "errors": errors})
 
 
 def _load_shoot_detail(month_dir: Path, shoot_dir: Path) -> dict:
@@ -1026,6 +1115,47 @@ def _checkpoint_events(ckpt: dict) -> list[dict]:
 
 PROGRESS_PATH    = OUTPUTS_DIR / "run_progress.json"
 PROGRESS_P2_PATH = OUTPUTS_DIR / "run_progress_p2.json"
+
+
+def _mark_progress_stopped(path: Path) -> None:
+    """Mark a progress file as stopped so is_live clears immediately after a manual stop."""
+    if not path.exists():
+        return
+    try:
+        data = json.loads(path.read_text())
+        if data.get("status") in ("in_progress", "paused"):
+            data["status"] = "stopped"
+            data["completed_at"] = datetime.utcnow().isoformat()
+            path.write_text(json.dumps(data, indent=2))
+    except Exception:
+        pass
+
+
+def _mark_progress_paused(path: Path) -> None:
+    """Mark a progress file as paused so live indicators dim immediately."""
+    if not path.exists():
+        return
+    try:
+        data = json.loads(path.read_text())
+        if data.get("status") == "in_progress":
+            data["status"] = "paused"
+            path.write_text(json.dumps(data, indent=2))
+    except Exception:
+        pass
+
+
+def _mark_progress_resumed(path: Path) -> None:
+    """Mark a progress file as in_progress again after a resume."""
+    if not path.exists():
+        return
+    try:
+        data = json.loads(path.read_text())
+        if data.get("status") == "paused":
+            data["status"] = "in_progress"
+            data.pop("completed_at", None)
+            path.write_text(json.dumps(data, indent=2))
+    except Exception:
+        pass
 
 
 def _read_progress() -> dict | None:
@@ -1573,6 +1703,10 @@ def app_status():
     needs_review_count = sum(s.get("needs_review", 0) for s in shoots if s["status"] != "empty")
 
     progress     = _read_progress()
+    p1_actually_running = process_manager.state != 'idle'
+    if progress and progress.get("status") in ("in_progress", "paused") and not p1_actually_running:
+        _mark_progress_stopped(PROGRESS_PATH)
+        progress = _read_progress()
     is_live      = bool(progress and progress.get("status") == "in_progress")
     run_id       = progress.get("run_id")    if progress else None
     run_status   = progress.get("status")    if progress else None
@@ -1614,6 +1748,21 @@ def app_status():
         except Exception:
             pass
 
+    # Find which agent is currently active (in_progress milestone)
+    active_agent = None
+    if progress and is_live:
+        for m in progress.get("milestones", []):
+            if m.get("status") == "in_progress":
+                active_agent = m.get("agent")
+                break
+    if not active_agent:
+        progress_p2 = _read_progress_p2()
+    if not active_agent and progress_p2 and progress_p2.get("status") == "in_progress":
+        for m in progress_p2.get("milestones", []):
+            if m.get("status") == "in_progress":
+                active_agent = m.get("agent")
+                break
+
     return jsonify({
         "is_live":           is_live,
         "p1_live":           process_manager.state    != 'idle',
@@ -1626,6 +1775,7 @@ def app_status():
         "sprint_ready":      sprint_ready,
         "sprint_ready_p2":   bool(_latest_report("content_plan_")),
         "completed_summary": completed_summary,
+        "active_agent":      active_agent,
     })
 
 
@@ -2327,6 +2477,7 @@ def run_start():
 @app.route("/api/run/stop", methods=["POST"])
 def run_stop():
     ok, msg = process_manager.stop()
+    _mark_progress_stopped(PROGRESS_PATH)
     if not ok:
         return jsonify({"error": msg}), 409
     return jsonify({"ok": True})
@@ -2335,6 +2486,7 @@ def run_stop():
 @app.route("/api/run/pause", methods=["POST"])
 def run_pause():
     ok, msg = process_manager.pause()
+    _mark_progress_paused(PROGRESS_PATH)
     if not ok:
         return jsonify({"error": msg}), 409
     return jsonify({"ok": True})
@@ -2343,6 +2495,7 @@ def run_pause():
 @app.route("/api/run/resume", methods=["POST"])
 def run_resume():
     ok, msg = process_manager.resume()
+    _mark_progress_resumed(PROGRESS_PATH)
     if not ok:
         return jsonify({"error": msg}), 409
     return jsonify({"ok": True})
@@ -2558,6 +2711,7 @@ def p2_start():
 @app.route("/api/p2/stop", methods=["POST"])
 def p2_stop():
     ok, msg = process_manager_p2.stop()
+    _mark_progress_stopped(PROGRESS_P2_PATH)
     if not ok:
         return jsonify({"error": msg}), 409
     return jsonify({"ok": True})
@@ -2566,6 +2720,7 @@ def p2_stop():
 @app.route("/api/p2/pause", methods=["POST"])
 def p2_pause():
     ok, msg = process_manager_p2.pause()
+    _mark_progress_paused(PROGRESS_P2_PATH)
     if not ok:
         return jsonify({"error": msg}), 409
     return jsonify({"ok": True})
@@ -2574,6 +2729,7 @@ def p2_pause():
 @app.route("/api/p2/resume", methods=["POST"])
 def p2_resume():
     ok, msg = process_manager_p2.resume()
+    _mark_progress_resumed(PROGRESS_P2_PATH)
     if not ok:
         return jsonify({"error": msg}), 409
     return jsonify({"ok": True})

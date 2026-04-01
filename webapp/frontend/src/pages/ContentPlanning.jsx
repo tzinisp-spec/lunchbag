@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
 import { X, ChevronLeft, ChevronRight, CalendarDays, Layers, Image as ImageIcon, List, LayoutGrid, Pencil, Check, X as XIcon, MoreHorizontal, Trash2, CheckSquare, Square } from 'lucide-react'
 import { api } from '../lib/api'
+import { useAuth } from '../lib/auth'
 import ConfirmDialog from '../components/ConfirmDialog'
 import { useToast } from '../lib/toast'
 
@@ -174,7 +175,7 @@ export default function ContentPlanning() {
       {/* Month filter dropdown + selection bar */}
       {posts.length > 0 && (
         <div className="flex items-center gap-3 mb-5 flex-wrap">
-          {postMonths.length > 0 && (
+          {view !== 'calendar' && postMonths.length > 0 && (
             <div className="relative">
               <select
                 value={activeFilter ?? ''}
@@ -552,6 +553,9 @@ function PostModal({ post, posts, initialEditing, onNavigate, onClose, onUpdate,
   const hasPrev = idx > 0
   const hasNext = idx < posts.length - 1
 
+  const { auth } = useAuth()
+  const isAdmin  = auth?.role === 'admin'
+
   const [editing,      setEditing]      = useState(initialEditing ?? false)
   const [editCaption,  setEditCaption]  = useState('')
   const [editHashtags, setEditHashtags] = useState('')
@@ -722,7 +726,7 @@ function PostModal({ post, posts, initialEditing, onNavigate, onClose, onUpdate,
             )}
           </div>
 
-          {post.type === 'carousel' && post.images?.some(i => i.mood || i.details) && (
+          {isAdmin && post.type === 'carousel' && post.images?.some(i => i.mood || i.details) && (
             <div>
               <Label>Slide details</Label>
               <div className="space-y-3 mt-1">
@@ -739,7 +743,7 @@ function PostModal({ post, posts, initialEditing, onNavigate, onClose, onUpdate,
             </div>
           )}
 
-          {post.type === 'single' && (post.mood || post.details || post.copy_angle) && (
+          {isAdmin && post.type === 'single' && (post.mood || post.details || post.copy_angle) && (
             <div className="space-y-3">
               {post.mood      && <div><Label>Mood</Label><p className="text-[var(--c-text-1b)] text-sm">{post.mood}</p></div>}
               {post.details   && <div><Label>Scene</Label><p className="text-[var(--c-text-1b)] text-sm leading-relaxed">{post.details}</p></div>}
