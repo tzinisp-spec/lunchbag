@@ -155,10 +155,10 @@ create_style_bible:
     exactly — do not invent your own locations.
 
     SHOT COUNT PER SET — NON NEGOTIABLE:
-    SET 1: exactly 17 shots
-    SET 2: exactly 17 shots
-    SET 3: exactly 16 shots
-    Total: 50 shots across all 3 sets.
+    SET 1: exactly {images_set_1} shots
+    SET 2: exactly {images_set_2} shots
+    SET 3: exactly {images_set_3} shots
+    Total: {images_per_sprint} shots across all 3 sets.
     Count your shots before finalising.
 
     Write the Style Bible and Shot List for

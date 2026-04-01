@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import base64
 import time
 import threading
@@ -248,6 +249,7 @@ def _scan_clean_refs(
                 ),
             )
             if response.candidates:
+                _track_api_call("preflight_calls")
                 print(
                     f"[ImageGenerator] Pre-flight: "
                     f"{ref_name} ✓ pass"
@@ -256,6 +258,7 @@ def _scan_clean_refs(
                     (ref_bytes, ref_mime, ref_name)
                 )
             else:
+                _track_api_call("preflight_calls")
                 feedback = ""
                 if hasattr(response, "prompt_feedback"):
                     feedback = str(response.prompt_feedback)
@@ -265,6 +268,7 @@ def _scan_clean_refs(
                     + (f" ({feedback})" if feedback else "")
                 )
         except Exception as e:
+            _track_api_call("preflight_calls")
             print(
                 f"[ImageGenerator] Pre-flight: "
                 f"{ref_name} ✗ error — excluded ({e})"
@@ -516,6 +520,26 @@ def _preflight_check(current_set: int) -> str | None:
 _GENERATION_COUNTER = 0
 _COUNTER_LOCK = threading.Lock()
 _LOG_LOCK      = threading.Lock()   # serialise multi-line log blocks
+
+# API call tracking
+_API_COUNTER_PATH = Path("outputs/api_counters.json")
+_API_FILE_LOCK    = threading.Lock()
+
+def _track_api_call(category: str, count: int = 1) -> None:
+    """Atomically increment an API call counter in api_counters.json."""
+    with _API_FILE_LOCK:
+        try:
+            data = {}
+            if _API_COUNTER_PATH.exists():
+                try:
+                    data = json.loads(_API_COUNTER_PATH.read_text())
+                except Exception:
+                    pass
+            data[category] = data.get(category, 0) + count
+            _API_COUNTER_PATH.parent.mkdir(parents=True, exist_ok=True)
+            _API_COUNTER_PATH.write_text(json.dumps(data, indent=2))
+        except Exception:
+            pass  # Never let counter errors break generation
 
 class ImageGeneratorTool(BaseTool):
     name: str = "The Lunchbags Image Generator"
@@ -1054,6 +1078,7 @@ class ImageGeneratorTool(BaseTool):
                         ),
                     ),
                 )
+                _track_api_call("image_gen_calls")
             except (AttributeError, TypeError, ImportError,
                     ModuleNotFoundError, NotImplementedError) as api_err:
                 # Programming error — retrying will never help
@@ -1063,6 +1088,7 @@ class ImageGeneratorTool(BaseTool):
             except Exception as api_err:
                 err_str = str(api_err)
                 print(f"[ImageGenerator] API Call Failed: {api_err}")
+                _track_api_call("image_gen_calls")
                 if "generate_requests_per_model_per_day" in err_str:
                     # Daily quota exhausted — extract retry time if available
                     import re as _re

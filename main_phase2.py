@@ -13,9 +13,18 @@ from lunchbag.tools.content_planner_tool import ContentPlannerTool
 from lunchbag.tools.review_generator_tool import ReviewGeneratorTool
 from lunchbag.tools.sprint_reporter_tool import SprintReporterTool
 from lunchbag.tools.catalog_utils import sync_catalog
+from lunchbag.tools.progress_tracker import ProgressTracker, PROGRESS_P2_PATH
+from lunchbag.tools.run_logger import RunLogger
 
 MAX_STEP_ATTEMPTS = 3
 RETRY_DELAY       = 10   # seconds between step retries
+
+PHASE2_MILESTONES = [
+    {"id": "copywriter",         "label": "Copywriter",         "agent": "copywriter"},
+    {"id": "content_planner",    "label": "Content Planner",    "agent": "planner"},
+    {"id": "review_generator",   "label": "Review Generator",   "agent": "orchestrator"},
+    {"id": "sprint_report_p2",   "label": "Sprint Report",      "agent": "orchestrator"},
+]
 
 
 # ── Shoot folder detection ────────────────────────────────
@@ -43,16 +52,27 @@ def _is_quota_exhausted(result: str) -> bool:
     return "DAILY_QUOTA_EXHAUSTED" in result
 
 
+def _error_snippet(result: str) -> str:
+    if result.startswith("EXCEPTION: "):
+        return result[len("EXCEPTION: "):][:100]
+    if "quota" in result.lower():
+        return "API quota exceeded"
+    return result[:100] if result else "unknown error"
+
+
 def _run_step_with_retry(
     step_name: str,
     step_fn,
     success_check,
     max_attempts: int = MAX_STEP_ATTEMPTS,
+    tracker: ProgressTracker = None,
+    mid: str = None,
 ) -> tuple[bool, str]:
     """
     Run a pipeline step with automatic retry.
     - Retries up to max_attempts on failure.
     - Hard-stops immediately on daily quota exhaustion.
+    - Optionally updates a ProgressTracker milestone.
     - Returns (success, last_result).
     """
     last_result = ""
@@ -61,6 +81,9 @@ def _run_step_with_retry(
             f"\n[Monitor] ── {step_name} "
             f"(attempt {attempt}/{max_attempts}) ──"
         )
+        if tracker and mid:
+            tracker.milestone_start(mid, attempt)
+
         try:
             last_result = step_fn()
         except Exception as e:
@@ -74,16 +97,25 @@ def _run_step_with_retry(
                 f"  Pipeline stopped. "
                 f"Resume tomorrow.\n"
             )
+            if tracker and mid:
+                tracker.milestone_fail(mid, "Daily API quota exhausted", final=True)
+                tracker.finish_run("failed")
             sys.exit(1)
 
         if success_check(last_result):
             print(f"[Monitor] ✓ {step_name} — OK")
+            if tracker and mid:
+                tracker.milestone_done(mid)
             return True, last_result
 
         print(
             f"[Monitor] ✗ {step_name} failed "
             f"(attempt {attempt}/{max_attempts})"
         )
+        if tracker and mid:
+            is_final = (attempt == max_attempts)
+            tracker.milestone_fail(mid, _error_snippet(last_result), final=is_final)
+
         if attempt < max_attempts:
             print(
                 f"[Monitor] Retrying in {RETRY_DELAY}s..."
@@ -124,12 +156,21 @@ def run():
         or get_latest_shoot()
     )
     os.environ["SHOOT_FOLDER"] = SHOOT_FOLDER
+    os.environ["REPORT_TYPE"]  = "content_planning"
     print(f"[Phase 2] Using shoot: {SHOOT_FOLDER}")
 
     print("\n" + "="*60)
     print("  THE LUNCHBAGS — PHASE 2")
     print("  Content Pipeline")
     print("="*60 + "\n")
+
+    # ── Logger + progress tracker ──────────────────
+    logger = RunLogger()
+    logger.start()
+
+    tracker = ProgressTracker(path=PROGRESS_P2_PATH)
+    tracker.start_run(f"Phase2-{SHOOT_FOLDER.replace('/', '_')}", PHASE2_MILESTONES)
+    tracker.set_meta(shoot_folder=SHOOT_FOLDER, phase="content_planning")
 
     # ── Catalog resync ────────────────────────────
     # Rebuilds catalog.json from actual files on disk
@@ -153,6 +194,8 @@ def run():
         "Step 1 — Copywriter",
         lambda: CopywriterTool()._run(""),
         _check_copywriter,
+        tracker=tracker,
+        mid="copywriter",
     )
 
     # Step 2 — Content Planner
@@ -160,6 +203,8 @@ def run():
         "Step 2 — Content Planner",
         lambda: ContentPlannerTool()._run(""),
         _check_content_planner,
+        tracker=tracker,
+        mid="content_planner",
     )
 
     # Step 3 — Review Generator
@@ -167,6 +212,8 @@ def run():
         "Step 3 — Review Generator",
         lambda: ReviewGeneratorTool()._run(""),
         _check_review_generator,
+        tracker=tracker,
+        mid="review_generator",
     )
 
     # Step 4 — Sprint Report
@@ -174,7 +221,12 @@ def run():
         "Step 4 — Sprint Report",
         lambda: SprintReporterTool()._run("{}"),
         _check_sprint_reporter,
+        tracker=tracker,
+        mid="sprint_report_p2",
     )
+
+    tracker.finish_run("completed")
+    logger.stop()
 
     print("\n" + "="*60)
     print("  PHASE 2 COMPLETE")

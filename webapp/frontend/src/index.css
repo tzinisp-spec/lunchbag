@@ -1,0 +1,88 @@
+@import "tailwindcss";
+
+@keyframes toast-enter {
+  from { opacity: 0; transform: translateX(16px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.toast-enter {
+  animation: toast-enter 0.18s ease-out;
+}
+
+/* Class-based dark mode for Tailwind v4 */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Semantic color tokens ─────────────────────────────── */
+
+:root {
+  /* Surfaces */
+  --c-page:         #f9fafb;   /* gray-50  — page / shell bg        */
+  --c-sidebar:      #ffffff;   /* white    — sidebar / icon rail     */
+  --c-surface:      #ffffff;   /* white    — cards, panels           */
+  --c-surface-2:    #f3f4f6;   /* gray-100 — secondary / hover       */
+  --c-surface-3:    #e5e7eb;   /* gray-200 — active, pressed         */
+  --c-surface-hover: rgba(0,0,0,0.04);
+  --c-card-hover:   rgba(0,0,0,0.03);
+
+  /* Borders */
+  --c-border-subtle: #f3f4f6;  /* gray-100 */
+  --c-border:       #e5e7eb;   /* gray-200 */
+  --c-border-2:     #d1d5db;   /* gray-300 */
+
+  /* Text — contrast ratios vs white: -1 7.3:1, -1b 5.7:1, -2 7.3:1, -3 4.5:1, -4 2.9:1 */
+  --c-text-1:  #111827;        /* gray-900 — primary                 */
+  --c-text-1b: #374151;        /* gray-700 — secondary primary       */
+  --c-text-2:  #4b5563;        /* gray-600 — secondary               */
+  --c-text-3:  #6b7280;        /* gray-500 — muted (WCAG AA)         */
+  --c-text-4:  #9ca3af;        /* gray-400 — very muted / decorative */
+
+  /* Nav */
+  --c-nav-active-bg:   #f3f4f6;
+  --c-nav-active-text: #111827;
+
+  /* Misc */
+  --c-icon-box:  #e5e7eb;      /* LB logo box background             */
+  --c-row-hover: rgba(0,0,0,0.03);
+}
+
+.dark {
+  /* Surfaces */
+  --c-page:         #000000;
+  --c-sidebar:      #000000;
+  --c-surface:      #111827;   /* gray-900 */
+  --c-surface-2:    #1f2937;   /* gray-800 */
+  --c-surface-3:    #374151;   /* gray-700 */
+  --c-surface-hover: rgba(255,255,255,0.05);
+  --c-card-hover:   rgba(31,41,55,0.5);    /* gray-800/50 */
+
+  /* Borders */
+  --c-border-subtle: #111827;  /* gray-900 */
+  --c-border:       #1f2937;   /* gray-800 */
+  --c-border-2:     #374151;   /* gray-700 */
+
+  /* Text */
+  --c-text-1:  #ffffff;
+  --c-text-1b: #e5e7eb;        /* gray-200 */
+  --c-text-2:  #9ca3af;        /* gray-400 */
+  --c-text-3:  #6b7280;        /* gray-500 */
+  --c-text-4:  #4b5563;        /* gray-600 */
+
+  /* Nav */
+  --c-nav-active-bg:   #111827; /* gray-900 */
+  --c-nav-active-text: #ffffff;
+
+  /* Misc */
+  --c-icon-box:  #111827;
+  --c-row-hover: rgba(255,255,255,0.03);
+}
+
+/* Smooth theme transition */
+*, *::before, *::after {
+  transition-property: background-color, border-color, color;
+  transition-duration: 150ms;
+  transition-timing-function: ease;
+}
+
+/* Override transition for elements where it would cause flicker */
+img, video, svg, [class*="animate-"] {
+  transition: none !important;
+}
